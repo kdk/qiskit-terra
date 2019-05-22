@@ -25,6 +25,7 @@ REQUIREMENTS = [
     "marshmallow>=2.17.0,<3",
     "marshmallow_polyfield>=3.2,<4",
     "networkx>=2.2",
+    "retworkx>=0.0.7",
     "numpy>=1.13",
     "pillow>=4.2.1",
     "ply>=3.10",
