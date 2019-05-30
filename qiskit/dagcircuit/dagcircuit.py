@@ -397,7 +397,7 @@ class DAGCircuit:
         # and adding new edges to the operation node from each input node
         al = [qargs, all_cbits]
         for q in itertools.chain(*al):
-            ie = list(self._multi_graph.successors(self.input_map[q]))
+            ie = list(self._multi_graph.successors(self.node_index[self.input_map[q]]))
             if len(ie) != 1:
                 raise DAGCircuitError("input node has multiple out-edges")
             self._multi_graph.add_edge(self._id_to_node[self._max_node_id], ie[0],
@@ -663,7 +663,7 @@ class DAGCircuit:
         # if not nx.is_directed_acyclic_graph(self._multi_graph):
         #     raise DAGCircuitError("not a DAG")
 
-        depth = rx.dag_longest_path_length(self._multi_graph) - 1
+        depth = rx.dag_longest_path_length(self._multi_graph) -  1
         return depth if depth != -1 else 0
 
     def width(self):
@@ -782,9 +782,9 @@ class DAGCircuit:
         slf = copy.deepcopy(self._multi_graph)
         oth = copy.deepcopy(other._multi_graph)
 
-        for node in slf.nodes:
+        for node in slf.nodes():
             slf.nodes[node]['node'] = node
-        for node in oth.nodes:
+        for node in oth.nodes():
             oth.nodes[node]['node'] = node
 
         return rx.is_isomorphic_node_match(
@@ -798,7 +798,8 @@ class DAGCircuit:
         Returns:
             generator(DAGNode): node in topological order
         """
-        return rx.topological_sort(self._multi_graph)
+        rev_node_index = { i:n for n,i in self.node_index.items() }
+        return (rev_node_index[i] for i in rx.topological_sort(self._multi_graph))
 #                                                 key=lambda x: str(x.qargs))
 
     def topological_op_nodes(self):
@@ -808,8 +809,7 @@ class DAGCircuit:
         Returns:
             generator(DAGnode): op node in topological order
         """
-        raw_nodes = self._multi_graph.nodes()
-        return (raw_nodes[nd] for nd in self.topological_nodes() if raw_nodes[nd].type == 'op')
+        return (nd for nd in self.topological_nodes() if nd.type == 'op')
 
     def substitute_node_with_dag(self, node, input_dag, wires=None):
         """Replace one node with dag.
@@ -908,7 +908,7 @@ class DAGCircuit:
             all_cbits.extend(m_cargs)
             al = [m_qargs, all_cbits]
             for q in itertools.chain(*al):
-                self._multi_graph.add_edge(full_pred_map[q],
+                self._multi_graph.add_edge(self.node_index[full_pred_map[q]],
                                            self.node_index[self._id_to_node[self._max_node_id]],
                                            {'name':"%s[%s]" % (q[0].name, q[1]),
                                            'wire':q})
@@ -949,7 +949,7 @@ class DAGCircuit:
         Yield:
             node: the node.
         """
-        for node in self._multi_graph.nodes:
+        for node in self._multi_graph.nodes():
             yield node
 
     def edges(self, nodes=None):
@@ -1102,7 +1102,7 @@ class DAGCircuit:
                           DeprecationWarning, 2)
             node = self._id_to_node[node]
 
-        return self._multi_graph.successors(node)
+        return self._multi_graph.successors(self.node_index[node])
 
     def predecessors(self, node):
         """Returns list of the predecessors of a node as DAGNodes."""
@@ -1112,7 +1112,7 @@ class DAGCircuit:
                           DeprecationWarning, 2)
             node = self._id_to_node[node]
 
-        return self._multi_graph.predecessors(node)
+        return self._multi_graph.predecessors(self.node_index[node])
 
     def quantum_predecessors(self, node):
         """Returns list of the predecessors of a node that are
@@ -1370,8 +1370,8 @@ class DAGCircuit:
         while cur_layer:
             for node in cur_layer:
                 # Count multiedges with multiplicity.
-                for successor in self._multi_graph.successors(node):
-                    multiplicity = self._multi_graph.number_of_edges(node, successor)
+                for successor in self._multi_graph.successors(self.node_index[node]):
+                    multiplicity = self._multi_graph.edges(node, successor))
                     if successor in predecessor_count:
                         predecessor_count[successor] -= multiplicity
                     else:
@@ -1449,7 +1449,7 @@ class DAGCircuit:
                 yield current_node
 
             # find the adjacent node that takes the wire being looked at as input
-            for node, edges in self._multi_graph.adj[current_node].items():
+            for node, edges in self._multi_graph.adj(current_node).items():
                 if any(wire == edge['wire'] for edge in edges.values()):
                     current_node = node
                     more_nodes = True
