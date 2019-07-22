@@ -26,7 +26,7 @@ The format is based on [Keep a Changelog].
 -   The `as_dict` method of Qobj is deprecated in favor of `to_dict`.
 -   Directly setting the circuit's internal data by setting
     `QuantumCircuit.data` is deprecated, instead `QuantumCircuit.append`
-    and the rest of the circuit API should be used instead.
+    and the rest of the circuit API should be used instead. (#2838)
 
 ### Added
 -   Added tests for `gate_map` and reference images for testing `plot_gate_map`
