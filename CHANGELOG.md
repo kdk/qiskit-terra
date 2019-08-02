@@ -82,6 +82,9 @@ The format is based on [Keep a Changelog].
 -   Changed definition of `Cu3Gate` to to equivalent to the canonical
     definition of a controlled `U3Gate` (\#2755)
 -   coupling_map now required to validate a backend.configuration() (\#2836)
+-   Assignments and modifications to `QuantumCircuit.data` will now be broadcast
+    and validated following the same rules used throughout the
+	`QuantumCircuit` API. (\#2826)
 
 ### Removed
 
