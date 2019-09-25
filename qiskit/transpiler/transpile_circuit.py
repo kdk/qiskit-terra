@@ -53,7 +53,7 @@ def transpile_circuit(circuit, transpile_config):
                 and not device_insts >= circuit.count_ops().keys()
         ):
             ms_basis_swap = transpile_config.basis_gates
-            transpile_config.basis_gates = ['u3', 'cx']
+            transpile_config.basis_gates = list(set(['u3', 'cx']).union(transpile_config.basis_gates)) 
 
         level = transpile_config.optimization_level
         if level is None:

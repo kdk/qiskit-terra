@@ -45,7 +45,7 @@ class MSBasisDecomposer(TransformationPass):
         super().__init__()
 
         self.basis = basis
-        self.requires = [Unroller(['u3', 'cx'])]
+        self.requires = [Unroller(list(set(basis).union(['u3', 'cx'])))]
 
         if set(basis) != {gate_name for gate_name in self.supported_basis_names}:
             raise QiskitError("Cannot unroll the circuit to the given basis, %s. "
@@ -68,6 +68,9 @@ class MSBasisDecomposer(TransformationPass):
         cnot_decomposition = cnot_rxx_decompose()
 
         for node in dag.op_nodes():
+            if node.name in self.basis:
+                continue
+
             basic_insts = ['measure', 'reset', 'barrier', 'snapshot']
             if node.name in basic_insts:
                 # TODO: this is legacy behavior.Basis_insts should be removed that these
