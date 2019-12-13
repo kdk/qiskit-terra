@@ -21,8 +21,7 @@ class CircuitEquivalenceLibrary():
             return self._base.get_equiv(gate)
         raise RuntimeError('no known decomp')
         return None # or Raise?
-    
-        
+
 
 StandardEquivalenceLibrary = CircuitEquivalenceLibrary()
 from qiskit.extensions import standard
@@ -39,6 +38,24 @@ for g in gates:
     print(gate, reg)
     circ.append(gate, [*reg], [])
     StandardEquivalenceLibrary.add_equiv(gate, circ.decompose())
+
+reg = QuantumRegister(2, 'q')
+circ = QuantumCircuit(reg)
+circ.h(1)
+circ.cx(0,1)
+circ.h(1)
+StandardEquivalenceLibrary.add_equiv(CnotGate(), circ)
+
+reg = QuantumRegister(1, 'q')
+circ = QuantumCircuit(reg)
+p = ParameterVector('th', 3)
+circ.rz(lam)
+circ.rx(pi/2)
+circ.rz(theta+pi)
+circ.rx(pi/2)
+circ.rz(phi+pi)
+
+StandardEquivalenceLibrary.add_equiv(U3Gate(*p), circ)
 
 
 # A catch, for gates, params are ordered (and thus so are Parameters)

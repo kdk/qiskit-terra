@@ -66,3 +66,8 @@ class BasisTranslator(TransformationPass):
                 dag.substitute_node_with_dag(node, target_node)
 
         return dag
+
+def simple_astar(edge_graph, src, tgt, heuristic):
+    from heapq import heappush, heappop
+
+    
