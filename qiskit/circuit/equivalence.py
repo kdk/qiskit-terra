@@ -1,64 +1,72 @@
 from inspect import signature
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
-from qiskit.circuit import QuantumCircuit, QuantumRegister, Gate
-from qiskit.circuit import ParameterVector
+from .gate import Gate
+from .parametervector import ParameterVector
+from .quantumcircuit import QuantumCircuit
+from .quantumregister import QuantumRegister
+
+Entry = namedtuple('Entry', ['search_base',
+                             'equivs'])
 
 class CircuitEquivalenceLibrary():
+    """A library storing equivalence translation rules."""
+    
     def __init__(self, *, base=None):
+        """Create a new equivalence library.
+
+        Args:
+            base - Optional[CircuitEquivalenceLibrary]: Base equivalence library
+                which will be referenced if an entry is not found in this library.
+        """
         self._base = base
-        # need to be careful about how we check if a gate is present
-        self._map = defaultdict(list)
 
-    # gate instance
-    def add_equiv(self, gate, circ):
-        self._map[gate.name].append(circ)
+        # keyformat: (gate.label, gate.name)
+        # entryformat: (search_base, entries)
+        
+        self._map = defaultdict(lambda: Entry(True, []))
 
-    def get_equiv(self, gate):
-        if gate.name in self._map:
-            return self._map[gate.name]
-        if self._base is not None:
-            return self._base.get_equiv(gate)
-        raise RuntimeError('no known decomp')
-        return None # or Raise?
+    def add_entry(self, gate, equivalent_circuit):
+        """Add one new equivalence definition to the library.
 
+        Will be added to all existing equalilities (including base)
 
-StandardEquivalenceLibrary = CircuitEquivalenceLibrary()
-from qiskit.extensions import standard
-gates = [ g for g in standard.__dict__.values() if type(g) is type and issubclass(g, Gate) ] # Should be Instruction? support cbits? Not a problem in stdlib other than barrier, which is already weird
-for g in gates:
-    if g.__name__ == 'MSGate' or g.__name__ == 'Barrier':
-        continue
-    n_params = len(signature(g.__init__).parameters) - 1
-    th = ParameterVector('th', n_params) # since we're inspecting param name, could re-use already
-    gate = g(*th)
-    n_qubits = gate.num_qubits
-    reg = QuantumRegister(n_qubits, 'q')
-    circ = QuantumCircuit(reg)
-    print(gate, reg)
-    circ.append(gate, [*reg], [])
-    StandardEquivalenceLibrary.add_equiv(gate, circ.decompose())
+        Args:
+            gate - Gate: \ldots
+            equivalent_circuit - QuantumCircuit: \ldots
 
-reg = QuantumRegister(2, 'q')
-circ = QuantumCircuit(reg)
-circ.h(1)
-circ.cx(0,1)
-circ.h(1)
-StandardEquivalenceLibrary.add_equiv(CnotGate(), circ)
+        """
+    
+        self._map[(gate.label, gate.name)].equivs.append(equivalent_circuit.copy())
 
-reg = QuantumRegister(1, 'q')
-circ = QuantumCircuit(reg)
-p = ParameterVector('th', 3)
-circ.rz(lam)
-circ.rx(pi/2)
-circ.rz(theta+pi)
-circ.rx(pi/2)
-circ.rz(phi+pi)
+    def set_entry(self, gate, entry):
+        """Set 
 
-StandardEquivalenceLibrary.add_equiv(U3Gate(*p), circ)
+        Will override existing definitions.
 
+        Args:
+            gate - Gate: \ldots
+            entry - List[QuantumCircuit]: \ldots
 
-# A catch, for gates, params are ordered (and thus so are Parameters)
-# But for circuits they're unordered
+        """
 
-SessionEquivalenceLibrary = CircuitEquivalenceLibrary(base=StandardEquivalenceLibrary)
+        self._map[gate.label, gate.name] = Entry(False, [q.copy() for q in entry])
+        
+    def get_entry(self, gate):
+        """Get
+
+        Args:
+            gate - Gate: \ldots
+
+        Returns: List[qc], if empty list, does not mean gate cannot be decomposed,
+        only that library contains no known decompositions
+
+        """
+
+        if (gate.label, gate.name) in self._map:
+            search_base, equivs = self._map[gate.label, gate.name]
+            if search_base:
+                return equivs + self._base.get_entry(gate)
+            return equivs
+
+        return []
