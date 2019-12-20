@@ -67,3 +67,5 @@ from .parameter import Parameter
 from .parametervector import ParameterVector
 from .parameterexpression import ParameterExpression
 from .equivalence import EquivalenceLibrary
+
+SessionEquivalenceLibrary = EquivalenceLibrary()

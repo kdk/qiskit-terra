@@ -44,7 +44,8 @@ from .rzz import RZZGate
 from .rxx import RXXGate
 from .ms import MSGate
 
-from qiskit.circuit import EquivalenceLibrary as _cel
+from qiskit.circuit.equivalence import EquivalenceLibrary as _cel
+from qiskit.circuit import SessionEquivalenceLibrary
 from inspect import signature
 from qiskit.circuit import ParameterVector as _pv, QuantumCircuit as _qc, QuantumRegister as _qr
 StandardEquivalenceLibrary = _cel()
@@ -130,4 +131,4 @@ StandardEquivalenceLibrary.add_entry(U3Gate(*p), circ)
 # # A catch, for gates, params are ordered (and thus so are Parameters)
 # # But for circuits they're unordered
 
-# SessionEquivalenceLibrary = CircuitEquivalenceLibrary(base=StandardEquivalenceLibrary)
+SessionEquivalenceLibrary._base= StandardEquivalenceLibrary
