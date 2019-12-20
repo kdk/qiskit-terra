@@ -69,5 +69,3 @@ class BasisTranslator(TransformationPass):
 
 def simple_astar(edge_graph, src, tgt, heuristic):
     from heapq import heappush, heappop
-
-    

@@ -9,7 +9,7 @@ from .quantumregister import QuantumRegister
 Entry = namedtuple('Entry', ['search_base',
                              'equivs'])
 
-class CircuitEquivalenceLibrary():
+class EquivalenceLibrary():
     """A library storing equivalence translation rules."""
     
     def __init__(self, *, base=None):
@@ -21,7 +21,7 @@ class CircuitEquivalenceLibrary():
         """
         self._base = base
 
-        # keyformat: (gate.label, gate.name)
+        # keyformat: (gate.label, gate.name, gate.num_qubits, gate_instance)
         # entryformat: (search_base, entries)
         
         self._map = defaultdict(lambda: Entry(True, []))
@@ -29,7 +29,7 @@ class CircuitEquivalenceLibrary():
     def add_entry(self, gate, equivalent_circuit):
         """Add one new equivalence definition to the library.
 
-        Will be added to all existing equalilities (including base)
+        Will be added to all existing equalilities (including base).
 
         Args:
             gate - Gate: \ldots
@@ -37,7 +37,7 @@ class CircuitEquivalenceLibrary():
 
         """
     
-        self._map[(gate.label, gate.name)].equivs.append(equivalent_circuit.copy())
+        self._map[(gate.label, gate.name, gate.num_qubits)].equivs.append(equivalent_circuit.copy())
 
     def set_entry(self, gate, entry):
         """Set 
@@ -50,7 +50,7 @@ class CircuitEquivalenceLibrary():
 
         """
 
-        self._map[gate.label, gate.name] = Entry(False, [q.copy() for q in entry])
+        self._map[gate.label, gate.name, gate.num_qubits] = Entry(False, [q.copy() for q in entry])
         
     def get_entry(self, gate):
         """Get
@@ -63,10 +63,41 @@ class CircuitEquivalenceLibrary():
 
         """
 
-        if (gate.label, gate.name) in self._map:
-            search_base, equivs = self._map[gate.label, gate.name]
-            if search_base:
+        if (gate.label, gate.name, gate.num_qubits) in self._map:
+            search_base, equivs = self._map[gate.label, gate.name, gate.num_qubits]
+            if search_base and self._base is not None:
                 return equivs + self._base.get_entry(gate)
             return equivs
 
+        # Can't just return equivs, need to parameter map (and copy)
+        
         return []
+
+    def _build_basis_graph(self):
+        # could be deferred, and calculated dynamically, only useful for visualization, high level analysis
+        # But could be useful for reachability analysis
+        import networkx as nx
+        if self._base is None:
+            graph = nx.MultiDiGraph()
+        else:
+            graph = super()._build_basis_graph()
+        
+        for (gate_label, gate_name, gate_num_qubits), (_, decomps) in self._map.items():
+            gate_basis = frozenset([gate_name])
+            for decomp in decomps:
+                decomp_basis = frozenset(decomp.count_ops())
+
+                graph.add_edge(gate_basis, decomp_basis, decomp=decomp)
+
+        return graph
+
+    def draw_basis_graph(self):
+        import io
+        import networkx as nx
+        import pydot
+        from PIL import Image
+
+        dot = nx.drawing.nx_pydot.to_pydot(self._build_basis_graph())
+        png = dot.create_png(prog='dot')
+
+        return Image.open(io.BytesIO(png))

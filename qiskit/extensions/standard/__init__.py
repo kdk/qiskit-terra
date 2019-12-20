@@ -44,7 +44,7 @@ from .rzz import RZZGate
 from .rxx import RXXGate
 from .ms import MSGate
 
-from qiskit.circuit import CircuitEquivalenceLibrary as _cel
+from qiskit.circuit import EquivalenceLibrary as _cel
 from inspect import signature
 from qiskit.circuit import ParameterVector as _pv, QuantumCircuit as _qc, QuantumRegister as _qr
 StandardEquivalenceLibrary = _cel()
@@ -56,49 +56,62 @@ StandardEquivalenceLibrary = _cel()
 #         continue
 
 for g in [# #Barrier, # No Barrier, Instruction and variadic
-          # ToffoliGate,
-          # FredkinGate,
-          # CnotGate,
-          # CyGate,
-          # CzGate,
-          # SwapGate,
-          # HGate,
-          # IdGate,
-          # SGate,
-          # SdgGate,
-          # TGate,
-          # TdgGate,
-          # U1Gate,
-          # U2Gate,
-          # U3Gate,
+          ToffoliGate,
+          FredkinGate,
+          CnotGate,
+          CyGate,
+          CzGate,
+          SwapGate,
+          HGate,
+          IdGate,
+          SGate,
+          SdgGate,
+          TGate,
+          TdgGate,
+          U1Gate,
+          U2Gate,
+          U3Gate,
           XGate,
           YGate,
           RGate,
-          # RXGate,
-          # RYGate,
-          # RZGate,
-          # Cu1Gate,
-          # CHGate,
-          # CrzGate,
-          # Cu3Gate,
-          # RZZGate,
-          # RXXGate,
+          RXGate,
+          RYGate,
+          RZGate,
+          Cu1Gate,
+          CHGate,
+          CrzGate,
+          Cu3Gate,
+          RZZGate,
+          RXXGate,
           #MSGate, # No MSGate, variadic
 ]:
-    n_params = len(signature(g.__init__).parameters) - 1
+    n_params = len(set(signature(g.__init__).parameters) - {'label', 'self'})
     th = _pv('th', n_params) # since we're inspecting param name, could re-use already
     gate = g(*th)
     n_qubits = gate.num_qubits
     reg = _qr(n_qubits, 'q')
     circ = _qc(reg)
-    #print(gate, reg)
-    circ.data.extend(gate.definition)
-    StandardEquivalenceLibrary.add_entry(gate, circ)
+    if gate.definition:
+        circ.data.extend(gate.definition)
+        StandardEquivalenceLibrary.add_entry(gate, circ)
+
+# MS, upto n _qubits
+for n_qubits in range(2, 13):
+    g = MSGate
+    n_params = 1
+    th = _pv('th', n_params) # since we're inspecting param name, could re-use already
+    gate = g(n_qubits, *th)
+    n_qubits = gate.num_qubits
+    reg = _qr(n_qubits, 'q')
+    circ = _qc(reg)
+    if gate.definition:
+        circ.data.extend(gate.definition)
+        StandardEquivalenceLibrary.add_entry(gate, circ)
 
 reg = _qr(2, 'q')
 circ = _qc(reg)
 circ.h(1)
-circ.cx(0,1)
+circ.cz(0,1)
 circ.h(1)
 StandardEquivalenceLibrary.add_entry(CnotGate(), circ)
 
@@ -111,7 +124,6 @@ circ.rx(pi/2, 0)
 circ.rz(p[1]+pi, 0)
 circ.rx(pi/2, 0)
 circ.rz(p[2]+pi, 0)
-
 StandardEquivalenceLibrary.add_entry(U3Gate(*p), circ)
 
 
