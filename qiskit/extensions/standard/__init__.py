@@ -127,7 +127,26 @@ circ.rx(pi/2, 0)
 circ.rz(p[2]+pi, 0)
 StandardEquivalenceLibrary.add_entry(U3Gate(*p), circ)
 
+# #cnot_through_xx = qc, 1603.07678.pdf fig 1
+# # v binary vector, Implementation of the CNOT gate using physical-level gates, where s = ±1 is the sign of the interaction parameter χ, specified by the ions the gate applies to (s is a parameter that cannot be varied), and v = ±1 may be chosen arbitrarily.
+# reg = _qr(2, 'q')
+# circ = _qc(reg)
+# v = _pv('th', 2)
+# circ.ry(v[0]*pi/2, 0)
+# circ.rxx(v[1]*pi/4, 0, 1)
+# circ.rx(-v[1]*pi/2, 0)
+# circ.rx(-v[0]*v[1]*pi/2)
+# circ.ry(-v[0]*pi/2)
+# StandardEquivalenceLibrary.add_entry(CnotGate(), circ)
 
+# (define-compiler CNOT-to-iSWAP ((cnot-gate ("CNOT" () q0 q1)))
+#   (inst "RZ"    '(#.-pi/2) q0)
+#   (inst "Z"     ()         q0)
+#   (inst "Z"     ()         q1)
+#   (inst "ISWAP" ()         q0 q1)
+#   (inst "RY"    '(#.-pi/2) q0)
+#   (inst "ISWAP" ()         q0 q1)
+#   (inst "RX"    '(#.-pi/2) q1))
 # cnot_through_iswap = qc
 # q_t_i.ry(1)
 # q_t_i.sqrt_swap(0,1)
@@ -137,12 +156,8 @@ StandardEquivalenceLibrary.add_entry(U3Gate(*p), circ)
 # q_t_i.-rz(0)
 # q_t_i.-ry(1)
 
-# cnot_through_xx = qc
-# qc.ry(v*pi/2, 0)
-# qc.xx(0,1, s*pi/4)
-# qc.rx(-s*pi/2, 0)
-# qc.rx(-v*s*pi/2)
-# qc.ry(-v*pi/2)
+#https://github.com/QISKit/openqasm/blob/master/examples/ibmqx2/iswap.qasm
+
 
 #https://www.mathstat.dal.ca/~selinger/quipper/doc/src/QuipperLib/GateDecompositions.html#line-53
 

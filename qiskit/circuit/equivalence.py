@@ -71,7 +71,10 @@ class EquivalenceLibrary():
 
         # Can't just return equivs, need to parameter map (and copy)
         
-        return []
+        if self._base is None:
+            return []
+
+        return self._base.get_entry(gate)
 
     def _build_basis_graph(self):
         # could be deferred, and calculated dynamically, only useful for visualization, high level analysis

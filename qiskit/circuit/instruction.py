@@ -220,6 +220,23 @@ class Instruction:
         """Set matrix representation"""
         self._definition = array
 
+    @property
+    def decompositions(self):
+        from qiskit.circuit import SessionEquivalenceLibrary as sel
+
+        return sel.get_entry(self)
+        
+    @decompositions.setter
+    def decompositions(self, decompositions):
+        from qiskit.circuit import SessionEquivalenceLibrary as sel
+
+        sel.set_entry(self, decompositions)
+
+    def add_decomposition(self, decomposition):
+        from qiskit.circuit import SessionEquivalenceLibrary as sel
+
+        sel.add_entry(self, decomposition)
+
     def assemble(self):
         """Assemble a QasmQobjInstruction"""
         instruction = QasmQobjInstruction(name=self.name, validate=False)
