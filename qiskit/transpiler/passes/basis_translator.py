@@ -42,28 +42,38 @@ class BasisTranslator(TransformationPass):
         """
 
         dag_ops = dag.count_ops()
-        if source_basis is not None:
-            # Check that input dag matches source_basis
-            pass
+
+        # if source_basis is not None:
+        #     # Check that input dag matches source_basis
+        #     pass
         
         # Walk through the DAG and expand each non-basis node
         # https://networkx.github.io/documentation/stable/_modules/networkx/algorithms/shortest_paths/astar.html
-        basis_map = simple_astar()
+        basis_map = simple_astar(self._eq_lib, dag_ops.keys(), self.target_basis, basis_dist)
 
         if basis_map is None:
             raise QiskitError(
-                'Unable to map source basis {} to target basis {}.'.format(
-                source_basis, target_basis))
-        
-        for node in dag.op_nodes():
-            target_node = basis_map[node.name]
-            if target_node.name == node.name:
-                continue
+                'Unable to map source basis {} to target basis {} over library {}.'.format(
+                    source_basis, target_basis, self._eq_lib))
+
+        # basis maps is an ordered list of transformations that move from src to target basis
+        mapped_ops = {}
+        for source_op in dag_ops:
+            target_op = empty_dag.append(source_op)
+            for map_ in basis_map:
+                target_op = 
             
-            if len(target_node) == 1 and len(node.qargs) == len(rule[0][1]):
-                dag.substitute_node(node, rule[0][0], inplace=True)
-            else:
-                dag.substitute_node_with_dag(node, target_node)
+
+        
+        # for node in dag.op_nodes():
+        #     target_node = basis_map[node.name]
+        #     if target_node.name == node.name:
+        #         continue
+            
+        #     if len(target_node) == 1 and len(node.qargs) == len(rule[0][1]):
+        #         dag.substitute_node(node, rule[0][0], inplace=True)
+        #     else:
+        #         dag.substitute_node_with_dag(node, target_node)
 
         return dag
 
