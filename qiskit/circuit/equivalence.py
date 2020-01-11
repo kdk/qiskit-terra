@@ -37,7 +37,7 @@ class EquivalenceLibrary():
 
         """
     
-        self._map[(gate.label, gate.name, gate.num_qubits)].equivs.append(equivalent_circuit.copy())
+        self._map[(gate.label, gate.name, gate.num_qubits)].equivs.append((gate.params, equivalent_circuit.copy()))
 
     def set_entry(self, gate, entry):
         """Set 
@@ -49,8 +49,9 @@ class EquivalenceLibrary():
             entry - List[QuantumCircuit]: \ldots
 
         """
-
-        self._map[gate.label, gate.name, gate.num_qubits] = Entry(False, [q.copy() for q in entry])
+        
+        # Should verify gate and entry have same number of free para
+        self._map[gate.label, gate.name, gate.num_qubits] = Entry(False, [(gate.params, q.copy()) for q in entry])
         
     def get_entry(self, gate):
         """Get
@@ -65,6 +66,10 @@ class EquivalenceLibrary():
 
         if (gate.label, gate.name, gate.num_qubits) in self._map:
             search_base, equivs = self._map[gate.label, gate.name, gate.num_qubits]
+
+            equivs = [ equiv_circ.bind_parameters({param: val for param, val in zip(params, gate.params)})
+                       for params, equiv_circ in equivs]
+            
             if search_base and self._base is not None:
                 return equivs + self._base.get_entry(gate)
             return equivs

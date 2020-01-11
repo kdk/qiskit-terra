@@ -52,6 +52,8 @@ class BasisTranslator(TransformationPass):
         logger.info('Begin BasisTranslator from source basis {} to target '
                     'basis {}.'.format(source_basis, target_basis))
 
+        # A couple things are tricky, basis are sets of strings
+        # And we get back a list of tuples: (parameterized gate, parameterized_circuit)
         basis_transform = simple_astar(self._equiv_lib, source_basis,
                                        target_basis, basis_dist)
         
@@ -64,40 +66,58 @@ class BasisTranslator(TransformationPass):
         compose_start_time = time.time()
         mapped_ops = {}
         for source_op in dag_ops:
+            # Gate classes having name, n_qubits as class properties would make this easier
             example_source_op = dag.named_nodes(source_op)[0].op
+            n_params = len(example_source_op.params)
+            placeholder_params = ParameterVector(source_op, n_params)
+            placeholder_gate = Gate(source_op, example_source_op.num_qubits, list(placeholder_params))
+            
             empty_dag = DAGCircuit()
             qr = QuantumRegister(example_source_op.num_qubits)
             empty_dag.add_qreg(qr)
-            empty_dag.apply_operation_back(example_source_op, qr[:], [])
+            empty_dag.apply_operation_back(placeholder_gate, qr[:], [])
             
-            for src_gate_name, dest_circ in basis_transform:
-                from qiskit.converters import circuit_to_dag
-                dest_dag = circuit_to_dag(dest_circ)
-                doomed_nodes = empty_dag.named_nodes(src_gate_name)
+            for src_gate, dest_circ in basis_transform:
+                doomed_nodes = empty_dag.named_nodes(src_gate.name)
                 for node in doomed_nodes:
+                    # Need to keep in the loop so we can re-cast params
+                    from qiskit.converters import circuit_to_dag
+                    dest_dag = circuit_to_dag(dest_circ.bind_parameters({
+                        sg_param: ph_param for sg_param, ph_param in zip(src_gate.params, placeholder_params)
+                    })
+
                     empty_dag.substitute_node_with_dag(node, dest_dag) # wires=None ?
 
             mapped_ops[source_op] = empty_dag
 
         compose_end_time = time.time()
-        logger.info('Basis translation path composed in {%.3f}s.'.format(
+        logger.info('Basis translation path composed in {:.3f}s.'.format(
             compose_end_time - compose_start_time))
             
-        for s, v in mapped_ops.items():
-            print(s)
-            from qiskit.converters import dag_to_circuit
-            print(dag_to_circuit(v))
-        return dag
+        # for s, v in mapped_ops.items():
+        #     print(s)
+        #     from qiskit.converters import dag_to_circuit
+        #     print(dag_to_circuit(v))
+        # return dag
         for node in dag.op_nodes():
-            target_node = mapped_ops[node.name]
-            if target_node.name == node.name:
-                continue
-            
-            if len(target_node) == 1 and len(node.qargs) == len(rule[0][1]):
-                dag.substitute_node(node, rule[0][0], inplace=True)
-            else:
-                dag.substitute_node_with_dag(node, target_node)
-
+            if node.name in mapped_ops:
+                target_dag = mapped_ops[node.name]
+                
+                # dag will be for a fully parameterized gate (that's how we searched it)
+                # need to dag -> circ -> dag to bind params :(
+                from qiskit.converters import dag_to_circuit
+                target_circuit = dag_to_circuit(target_dag)
+                target_dag = circuit_to_dag(target_circuit.bind_parameters({abs_param: node_param
+                                                                            for abs_param, node_param
+                                                                            in zip()}))
+                
+                
+                # if list(target_dag.op_nodes()) and len(target_dag.qubits) == len(node.qargs):
+                #     dag.substitute_node(node, next(target_dag.op_nodes()).op, inplace=True)
+                # else:
+                #     dag.substitute_node_with_dag(node, target_dag)
+            elif node.name not in target_basis:
+                raise RuntimeError('BasisTranslator did not map {}'.format(node.name))
         return dag
 
 
@@ -146,7 +166,7 @@ def simple_astar(edge_graph, src_basis, tgt_basis, heuristic):
 
         if current_basis.issubset(tgt_basis):
             search_end_time = time.time()
-            logger.info('Basis translation path found in {%.3f}s.'.format(
+            logger.info('Basis translation path found in {:.3f}s.'.format(
                 search_end_time - search_start_time))
 
             rtn = []
@@ -160,7 +180,7 @@ def simple_astar(edge_graph, src_basis, tgt_basis, heuristic):
 
             logger.debug('Transformation path:')
             for xform_gate, xform in rtn:
-                logger.debug(xform_gate, '=>', xform)
+                logger.debug('{} =>\n{}'.format(xform_gate, xform))
             return rtn
 
         logger.debug('Examining basis {}.'.format(current_basis))
@@ -173,8 +193,8 @@ def simple_astar(edge_graph, src_basis, tgt_basis, heuristic):
             xforms = [ form for n in range(10)
                        for form in edge_graph.get_entry(Gate(gate_name, n, []))]
 
-            basis_remain = frozenset(current_basis - {gate_name})
-            neighbors = [ (basis_remain | xform.count_ops().keys(), xform)
+            basis_remain = current_basis - {gate_name}
+            neighbors = [ (frozenset(basis_remain | xform.count_ops().keys()), xform)
                           for xform in xforms ]
 
             for neighbor, xform in neighbors:
@@ -194,7 +214,7 @@ def simple_astar(edge_graph, src_basis, tgt_basis, heuristic):
                 heappush(open_heap, (fScore[neighbor], -1 * next(count), neighbor))
 
     search_end_time = time.time()
-    logger.info('Basis translation found no solution in {%.3f}s.'.format(
+    logger.info('Basis translation found no solution in {:.3f}s.'.format(
         search_end_time - search_start_time))
 
     return None
