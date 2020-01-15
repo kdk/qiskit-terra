@@ -88,11 +88,12 @@ class EquivalenceLibrary():
         if self._base is None:
             graph = nx.MultiDiGraph()
         else:
-            graph = super()._build_basis_graph()
-        
+            graph = self._base._build_basis_graph()
+
+        # KDK bug here in that if we set at a higher level, we'll still pull lower level defn's into graph
         for (gate_label, gate_name, gate_num_qubits), (_, decomps) in self._map.items():
             gate_basis = frozenset([gate_name])
-            for decomp in decomps:
+            for params, decomp in decomps:
                 decomp_basis = frozenset(decomp.count_ops())
 
                 graph.add_edge(gate_basis, decomp_basis, decomp=decomp)

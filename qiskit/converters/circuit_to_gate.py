@@ -62,6 +62,9 @@ def circuit_to_gate(circuit, parameter_map=None):
                 params=sorted(parameter_dict.values(), key=lambda p: p.name))
     gate.condition = None
 
+    from qiskit.circuit import SessionEquivalenceLibrary as sel
+    sel.add_entry(gate, circuit)
+
     def find_bit_position(bit):
         """find the index of a given bit (Register, int) within
         a flat ordered list of bits of the circuit

@@ -109,6 +109,8 @@ for n_qubits in range(2, 13):
         circ.data.extend(gate.definition)
         StandardEquivalenceLibrary.add_entry(gate, circ)
 
+## Add further identities.
+
 reg = _qr(2, 'q')
 circ = _qc(reg)
 circ.h(1)
@@ -169,3 +171,5 @@ StandardEquivalenceLibrary.add_entry(U3Gate(*p), circ)
 ## MS, CX, CZ, CR, iSWAP, CPhase
 
 SessionEquivalenceLibrary._base= StandardEquivalenceLibrary
+
+
