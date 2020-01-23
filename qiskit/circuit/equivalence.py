@@ -59,8 +59,7 @@ class EquivalenceLibrary():
         Args:
             gate - Gate: \ldots
 
-        Returns: List[qc], if empty list, does not mean gate cannot be decomposed,
-        only that library contains no known decompositions
+        Returns: List[qc], if empty list, library contains no known decompositions
 
         """
 
