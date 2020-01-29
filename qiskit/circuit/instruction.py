@@ -139,7 +139,7 @@ class Instruction:
         self._params = []
         for single_param in parameters:
             # example: u2(pi/2, sin(pi/4))
-            if isinstance(single_param, (ParameterExpression)):
+            if isinstance(single_param, ParameterExpression):
                 self._params.append(single_param)
             # example: OpenQASM parsed instruction
             elif isinstance(single_param, node.Node):

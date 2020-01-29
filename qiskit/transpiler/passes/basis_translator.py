@@ -86,7 +86,11 @@ class BasisTranslator(TransformationPass):
                     from qiskit.converters import circuit_to_dag
                     dcc = dest_circ.copy()
                     for dest_param, doomed_param in zip(params, node.op.params):
-                        dcc._substitute_parameters({dest_param: doomed_param})
+                        from qiskit.circuit import Parameter
+                        if isinstance(doomed_param, Parameter):
+                            dcc._substitute_parameters({dest_param: doomed_param})
+                        else:
+                            dcc._bind_parameter(dest_param, float(doomed_param))
                     dest_dag = circuit_to_dag(dcc)
                     # KDK Above (or something like it is what we want, but without gate parameters, how do we know what to bind to?
 
@@ -134,7 +138,7 @@ def basis_dist(basis, target):
     # Note: can search for minimum number of substitutions, or if we start with total gate count, can minimize for final gate count, final fidelity score
     # each a different function
 
-    return 0
+    return len(basis ^ target)
     
 def basis_search(edge_graph, src_basis, tgt_basis, heuristic):
     # https://networkx.github.io/documentation/stable/_modules/networkx/algorithms/shortest_paths/astar.html
