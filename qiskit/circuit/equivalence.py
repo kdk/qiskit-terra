@@ -44,7 +44,7 @@ class EquivalenceLibrary():
 
         self._map = {}
 
-    def add_equivalence(self, gate, equivalent_circuit):
+    def add_equivalence(self, gate, equivalent_circuit, validate=True):
         """Add a new equivalence to the library. Future queries for the Gate
         will include the given circuit, in addition to all existing equivalences
         (including those from base).
@@ -57,6 +57,16 @@ class EquivalenceLibrary():
             gate (Gate): A Gate instance.
             equivalent_circuit (QuantumCircuit): A circuit equivalently
                 implementing the given Gate.
+            validate (Bool): Optional. If True (default), attempts to check that
+                added entires are equivalent to those already present for this
+                gate. Raises a CircuitError if not. This argument does not
+                rigorously check if parameterized definitions are equivalent, and
+                so has a non-zero false negative rate in these cases.
+
+        Raises:
+            CircuitError: If added circuit and gate are not of the same number of
+               qubits and parameters. Or, if validate=True, if added definition
+               is determined non-equivalent to an existing entry.
         """
 
         _raise_if_shape_mismatch(gate, equivalent_circuit)
@@ -67,6 +77,9 @@ class EquivalenceLibrary():
 
         equiv = Equivalence(params=gate.params.copy(),
                             circuit=equivalent_circuit.copy())
+
+        if validate:
+            self._validate_equiv_against_existing(key, equiv)
 
         if key not in self._map:
             self._map[key] = Entry(search_base=True, equivalences=[])
@@ -90,7 +103,40 @@ class EquivalenceLibrary():
         return (key in self._map or
                 (self._base.has_entry(gate) if self._base is not None else False))
 
-    def set_entry(self, gate, entry):
+    def _validate_equiv_against_existing(self, key, equiv, check_symbolic=False):
+        existing_equivs = self._get_equivalences(key)
+
+        if any(circ.parameters for circ in equiv + existing_equvis) and check_symbolic:
+            # Assume every entry in the library will have the same number of params as us.
+            # KDK Raise if attempting to register a partial parameterization or handle here.
+            pes = [(idx, p)
+                   for idx, p in enumerate(existing_equiv.params)
+                   if isinstance(p, ParameterExpression)]
+            # KDK above if should always be True (see previous KDK)
+
+            test_p_vals = [0.1 * n for n in range(len(pes))]
+
+            test_op = Operator(_rebind_equiv(equiv, test_p_vals))
+            test_exist_op = Operator(_rebind_equiv(existing_equiv, test_p_vals))
+
+            return
+        else:
+            for existing_equiv in existing_equivs:
+                from qiskit.quantum_info import Operator
+
+                test_op = Operator(equiv)
+                test_exist_op = Operator(existing_equiv)
+
+                if test_op != test_exist_op:
+                    raise CircuitError(
+                        'Attemping to add entry not equal to existing entries. '
+                        'Key: {}. New equiv: {} Existing equiv: {}. Param values: {}.'.format(
+                            key,
+                            equiv,
+                            existing_equiv,
+                            test_p_vals))
+
+    def set_entry(self, gate, entry, validate=True):
         """Set the equivalence record for a Gate. Future queries for the Gate
         will return only the circuits provided.
 
@@ -102,6 +148,15 @@ class EquivalenceLibrary():
             gate (Gate): A Gate instance.
             entry (List['QuantumCircuit']) : A list of QuantumCircuits, each
                 equivalently implementing the given Gate.
+            validate (Bool): Optional. If True (default), attempts to check that
+                added entires are equivalent to those already present for this
+                gate. Raises a CircuitError if not. This option has no effect if
+                the added entry is parameterized.
+
+        Raises:
+            CircuitError: If added circuit and gate are not of the same number of
+               qubits and parameters. Or, if validate=True, if added definition
+               is determined non-equivalent to an existing entry.
         """
 
         for equiv in entry:
@@ -114,6 +169,10 @@ class EquivalenceLibrary():
         equivs = [Equivalence(params=gate.params.copy(),
                               circuit=equiv.copy())
                   for equiv in entry]
+
+        if validate:
+            for equiv in equivs:
+                self._validate_equiv_against_existing(key, equiv)
 
         self._map[key] = Entry(search_base=False,
                                equivalences=equivs)
