@@ -361,41 +361,61 @@ class TestEquivalenceLibraryWithParameters(QiskitTestCase):
         self.assertEqual(entry[0], first_expected)
         self.assertEqual(entry[1], second_expected)
 
-    # def test_adding_gate_and_partially_specified_gate(self):
-    #     """Verify entries will different numbers of parameters will be returned."""
-    #     eq_lib = EquivalenceLibrary()
+    def test_adding_gate_and_partially_specified_gate(self):
+        """Verify entries will different numbers of parameters will be returned."""
+        # KDK Update this to validate we raise if trying to add a reduction.
+        # Nb this is a conscious short-term choice, reduction == optimization
+        # Could be implemented if deemed workthwhile, would require roughly
+        # - mode of asserting parameters "close enough" to apply reduction
+        # - composing probably needs to be smarter
+        # - validate we don't hit bug below
+        # - weigh adding reduction edges vs making pass able to traverse reverse edges
+        eq_lib = EquivalenceLibrary()
 
-    #     theta = Parameter('theta')
-    #     phi = Parameter('phi')
+        theta = Parameter('theta')
+        phi = Parameter('phi')
 
-    #     # e.g. RGate(theta, phi)
-    #     gate_full = OneQubitTwoParamGate(theta, phi)
-    #     equiv_full = QuantumCircuit(1)
-    #     equiv_full.u2(theta, phi, 0)
+        # e.g. RGate(theta, phi)
+        gate_full = OneQubitTwoParamGate(theta, phi)
+        equiv_full = QuantumCircuit(1)
+        equiv_full.u2(theta, phi, 0)
 
-    #     eq_lib.add_equivalence(gate_full, equiv_full)
+        eq_lib.add_equivalence(gate_full, equiv_full)
 
-    #     gate_partial = OneQubitTwoParamGate(theta, 0)
-    #     equiv_partial = QuantumCircuit(1)
-    #     equiv_partial.rx(theta, 0)
+        gate_partial = OneQubitTwoParamGate(theta, 0)
+        equiv_partial = QuantumCircuit(1)
+        equiv_partial.rx(theta, 0)
 
-    #     eq_lib.add_equivalence(gate_partial, equiv_partial)
+        with self.assertRaisesRegex(CircuitError, 'not equal to existing'):
+            eq_lib.add_equivalence(gate_partial, equiv_partial)
 
-    #     lam = Parameter('lam')
-    #     gate_query = OneQubitTwoParamGate(lam, 0)
+        # lam = Parameter('lam')
+        # gate_query = OneQubitTwoParamGate(lam, 0)
 
-    #     entry = eq_lib.get_entry(gate_query)
+        # entry = eq_lib.get_entry(gate_query)
 
-    #     first_expected = QuantumCircuit(1)
-    #     first_expected.u2(lam, 0, 0)
+        # first_expected = QuantumCircuit(1)
+        # first_expected.u2(lam, 0, 0)
 
-    #     second_expected = QuantumCircuit(1)
-    #     second_expected.rx(lam, 0)
+        # second_expected = QuantumCircuit(1)
+        # second_expected.rx(lam, 0)
 
-    #     self.assertEqual(len(entry), 2)
-    #     self.assertEqual(entry[0], first_expected)
-    #     self.assertEqual(entry[1], second_expected)
+        # self.assertEqual(len(entry), 2)
+        # self.assertEqual(entry[0], first_expected)
+        # self.assertEqual(entry[1], second_expected)
 
+        # # Verify the more specific instance is not returned on queries to the general
+        # alpha = Parameter('alpha')
+        # beta = Parameter('beta')
+        # gate_full_query = OneQubitTwoParamGate(alpha, beta)
+
+        # entry = eq_lib.get_entry(gate_full_query)
+
+        # expected = QuantumCircuit(1)
+        # expected.rx(alpha, beta)
+
+        # self.assertEqual(len(entry), 1)
+        # self.assertEqual(entry[0], expected)
 
 class TestSessionEquivalenceLibrary(QiskitTestCase):
     """Test cases for SessionEquivalenceLibrary."""
