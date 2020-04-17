@@ -161,60 +161,62 @@ for inst, qargs, cargs in [
     def_rc3x.append(inst, qargs, cargs)
 _sel.add_equivalence(RC3XGate(), def_rc3x, validate=False)
 
-# C3XGate
+# C3XGate name conflicts with MCXGate
+# # C3XGate
 
-q = QuantumRegister(4, 'q')
-def_c3x = QuantumCircuit(q)
-for inst, qargs, cargs in [
-        (HGate(), [q[3]], []),
-        (CU1Gate(-pi/4), [q[0], q[3]], []),
-        (HGate(), [q[3]], []),
-        (CXGate(), [q[0], q[1]], []),
-        (HGate(), [q[3]], []),
-        (CU1Gate(pi/4), [q[1], q[3]], []),
-        (HGate(), [q[3]], []),
-        (CXGate(), [q[0], q[1]], []),
-        (HGate(), [q[3]], []),
-        (CU1Gate(-pi/4), [q[1], q[3]], []),
-        (HGate(), [q[3]], []),
-        (CXGate(), [q[1], q[2]], []),
-        (HGate(), [q[3]], []),
-        (CU1Gate(pi/4), [q[2], q[3]], []),
-        (HGate(), [q[3]], []),
-        (CXGate(), [q[0], q[2]], []),
-        (HGate(), [q[3]], []),
-        (CU1Gate(-pi/4), [q[2], q[3]], []),
-        (HGate(), [q[3]], []),
-        (CXGate(), [q[1], q[2]], []),
-        (HGate(), [q[3]], []),
-        (CU1Gate(pi/4), [q[2], q[3]], []),
-        (HGate(), [q[3]], []),
-        (CXGate(), [q[0], q[2]], []),
-        (HGate(), [q[3]], []),
-        (CU1Gate(-pi/4), [q[2], q[3]], []),
-        (HGate(), [q[3]], [])
-]:
-    def_c3x.append(inst, qargs, cargs)
-_sel.add_equivalence(C3XGate(), def_c3x, validate=False)
+# q = QuantumRegister(4, 'q')
+# def_c3x = QuantumCircuit(q)
+# for inst, qargs, cargs in [
+#         (HGate(), [q[3]], []),
+#         (CU1Gate(-pi/4), [q[0], q[3]], []),
+#         (HGate(), [q[3]], []),
+#         (CXGate(), [q[0], q[1]], []),
+#         (HGate(), [q[3]], []),
+#         (CU1Gate(pi/4), [q[1], q[3]], []),
+#         (HGate(), [q[3]], []),
+#         (CXGate(), [q[0], q[1]], []),
+#         (HGate(), [q[3]], []),
+#         (CU1Gate(-pi/4), [q[1], q[3]], []),
+#         (HGate(), [q[3]], []),
+#         (CXGate(), [q[1], q[2]], []),
+#         (HGate(), [q[3]], []),
+#         (CU1Gate(pi/4), [q[2], q[3]], []),
+#         (HGate(), [q[3]], []),
+#         (CXGate(), [q[0], q[2]], []),
+#         (HGate(), [q[3]], []),
+#         (CU1Gate(-pi/4), [q[2], q[3]], []),
+#         (HGate(), [q[3]], []),
+#         (CXGate(), [q[1], q[2]], []),
+#         (HGate(), [q[3]], []),
+#         (CU1Gate(pi/4), [q[2], q[3]], []),
+#         (HGate(), [q[3]], []),
+#         (CXGate(), [q[0], q[2]], []),
+#         (HGate(), [q[3]], []),
+#         (CU1Gate(-pi/4), [q[2], q[3]], []),
+#         (HGate(), [q[3]], [])
+# ]:
+#     def_c3x.append(inst, qargs, cargs)
+# _sel.add_equivalence(C3XGate(), def_c3x, validate=False)
 
 
-# C4XGate
+# C4XGate name conflicts with MCXGate
+# # C4XGate
 
-q = QuantumRegister(5, 'q')
-def_c4x = QuantumCircuit(q)
-for inst, qargs, cargs in [
-        (HGate(), [q[4]], []),
-        (CU1Gate(-pi / 2), [q[3], q[4]], []),
-        (HGate(), [q[4]], []),
-        (C3XGate(), [q[0], q[1], q[2], q[3]], []),
-        (HGate(), [q[4]], []),
-        (CU1Gate(pi / 2), [q[3], q[4]], []),
-        (HGate(), [q[4]], []),
-        (C3XGate(), [q[0], q[1], q[2], q[3]], []),
-        (C3XGate(pi / 8), [q[0], q[1], q[2], q[4]], []),
-]:
-    def_c4x.append(inst, qargs, cargs)
-_sel.add_equivalence(C4XGate(), def_c4x, validate=False)
+# q = QuantumRegister(5, 'q')
+# def_c4x = QuantumCircuit(q)
+# for inst, qargs, cargs in [
+#         (HGate(), [q[4]], []),
+#         (CU1Gate(-pi / 2), [q[3], q[4]], []),
+#         (HGate(), [q[4]], []),
+#         (C3XGate(), [q[0], q[1], q[2], q[3]], []),
+#         (HGate(), [q[4]], []),
+#         (CU1Gate(pi / 2), [q[3], q[4]], []),
+#         (HGate(), [q[4]], []),
+#         (C3XGate(), [q[0], q[1], q[2], q[3]], []),
+#         (C3XGate(pi / 8), [q[0], q[1], q[2], q[4]], []),
+# ]:
+#     def_c4x.append(inst, qargs, cargs)
+# _sel.add_equivalence(C4XGate(), def_c4x, validate=False)
 
 # RXGate
 
