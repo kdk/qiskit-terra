@@ -1928,6 +1928,10 @@ class QuantumCircuit:
         return self.append(CZGate(label=label, ctrl_state=ctrl_state),
                            [control_qubit, target_qubit], [])
 
+    def zx90(self, control_qubit, target_qubit):
+        """Apply :class:`~qiskit.circuit.library.standard_gates.ZX90Gate`."""
+        from .library.standard_gates.zx90 import ZX90Gate
+        return self.append(ZX90Gate(), [control_qubit, target_qubit], [])
 
 def _circuit_from_qasm(qasm):
     # pylint: disable=cyclic-import

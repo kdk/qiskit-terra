@@ -83,6 +83,7 @@ from .x import XGate, CXGate, CCXGate, C3XGate, C4XGate, RCCXGate, RC3XGate
 from .x import MCXGate, MCXGrayCode, MCXRecursive, MCXVChain
 from .y import YGate, CYGate
 from .z import ZGate, CZGate
+from .zx90 import ZX90Gate
 
 from .boolean_logical_gates import logical_and, logical_or
 from .multi_control_rotation_gates import mcrx, mcry, mcrz

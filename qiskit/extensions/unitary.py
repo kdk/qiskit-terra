@@ -23,12 +23,12 @@ from qiskit.circuit import Gate, ControlledGate
 from qiskit.circuit import QuantumCircuit
 from qiskit.circuit import QuantumRegister
 from qiskit.circuit._utils import _compute_control_matrix
-from qiskit.circuit.library.standard_gates import U3Gate
+from qiskit.circuit.library.standard_gates import U3Gate, ZX90Gate
 from qiskit.extensions.quantum_initializer import isometry
 from qiskit.quantum_info.operators.predicates import matrix_equal
 from qiskit.quantum_info.operators.predicates import is_unitary_matrix
 from qiskit.quantum_info.synthesis.one_qubit_decompose import OneQubitEulerDecomposer
-from qiskit.quantum_info.synthesis.two_qubit_decompose import two_qubit_cnot_decompose
+from qiskit.quantum_info.synthesis.two_qubit_decompose import two_qubit_cnot_decompose, TwoQubitBasisDecomposer
 from qiskit.extensions.exceptions import ExtensionError
 
 _DECOMPOSER1Q = OneQubitEulerDecomposer('U3')
@@ -110,7 +110,7 @@ class UnitaryGate(Gate):
             theta, phi, lam = _DECOMPOSER1Q.angles(self.to_matrix())
             self.definition = [(U3Gate(theta, phi, lam), [q[0]], [])]
         elif self.num_qubits == 2:
-            self.definition = two_qubit_cnot_decompose(self.to_matrix()).data
+            self.definition = TwoQubitBasisDecomposer(ZX90Gate())(self.to_matrix()).data#two_qubit_cnot_decompose(self.to_matrix()).data
         else:
             q = QuantumRegister(self.num_qubits, "q")
             self.definition = [(isometry.Isometry(self.to_matrix(), 0, 0),
