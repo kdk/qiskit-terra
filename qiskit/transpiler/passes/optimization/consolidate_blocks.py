@@ -20,7 +20,7 @@ from qiskit.circuit import QuantumRegister, QuantumCircuit
 from qiskit.dagcircuit import DAGCircuit
 from qiskit.quantum_info.operators import Operator
 from qiskit.quantum_info.synthesis import TwoQubitBasisDecomposer
-from qiskit.extensions import UnitaryGate, CXGate, ZX90Gate
+from qiskit.extensions import UnitaryGate, CXGate, ZX90Gate, ZZGate, CREchoGate
 from qiskit.transpiler.basepasses import TransformationPass
 from qiskit.transpiler.exceptions import TranspilerError
 

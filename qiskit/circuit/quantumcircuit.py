@@ -1933,6 +1933,15 @@ class QuantumCircuit:
         from .library.standard_gates.zx90 import ZX90Gate
         return self.append(ZX90Gate(), [control_qubit, target_qubit], [])
 
+    def cr90(self, control_qubit, target_qubit):
+        from .library.standard_gates.crecho import CREchoGate
+        return self.append(CREcho(), [control_qubit, target_qubit], [])
+
+    def zz(self, control_qubit, target_qubit):
+        from .library.standard_gates.zz import ZZGate
+        return self.append(ZZGate(), [control_qubit, target_qubit], [])
+
+    
 def _circuit_from_qasm(qasm):
     # pylint: disable=cyclic-import
     from qiskit.converters import ast_to_dag

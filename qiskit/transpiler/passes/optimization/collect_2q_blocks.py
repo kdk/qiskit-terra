@@ -50,7 +50,7 @@ class Collect2qBlocks(AnalysisPass):
         # Initiate the commutation set
         self.property_set['commutation_set'] = defaultdict(list)
 
-        good_names = ["cx", "u1", "u2", "u3", "id", "zx90", "swap"]
+        good_names = ["cx", "u1", "u2", "u3", "id", "zx90", "swap", "zz", "crecho"]
         block_list = []
         nodes = list(dag.topological_nodes())
         nodes_seen = dict(zip(nodes, [False] * len(nodes)))
@@ -58,7 +58,7 @@ class Collect2qBlocks(AnalysisPass):
 
             group = []
             # Explore predecessors and successors of cx gates
-            if nd.name in ("cx", "zx90", "swap") and nd.condition is None and not nodes_seen[nd]:
+            if nd.name in ("cx", "zx90", "swap", "zz", "crecho") and nd.condition is None and not nodes_seen[nd]:
                 these_qubits = set(nd.qargs)
                 # Explore predecessors of the "cx" node
                 pred = list(dag.quantum_predecessors(nd))
@@ -69,8 +69,8 @@ class Collect2qBlocks(AnalysisPass):
                     if len(pred) == 1 and not nodes_seen[pred[0]]:
                         pnd = pred[0]
                         if pnd.name in good_names and pnd.condition is None:
-                            if (pnd.name in ("cx", "zx90", "swap") and set(pnd.qargs) == these_qubits) or \
-                                    pnd.name not in ("cx", "zx90", "swap") and not pnd.op.is_parameterized():
+                            if (pnd.name in ("cx", "zx90", "swap", "zz", "crecho") and set(pnd.qargs) == these_qubits) or \
+                                    pnd.name not in ("cx", "zx90", "swap", "zz", "crecho") and not pnd.op.is_parameterized():
                                 group.append(pnd)
                                 nodes_seen[pnd] = True
                                 pred_next.extend(dag.quantum_predecessors(pnd))
@@ -85,14 +85,14 @@ class Collect2qBlocks(AnalysisPass):
                             # We need to avoid accidentally adding a cx on these_qubits
                             # since these must have a dependency through the other predecessor
                             # in this case
-                            if pred[0].name in ("cx", "zx90", "swap") and set(pred[0].qargs) == these_qubits:
+                            if pred[0].name in ("cx", "zx90", "swap", "zz", "crecho") and set(pred[0].qargs) == these_qubits:
                                 sorted_pred = [pred[1]]
-                            elif pred[1].name in ("cx", "zx90", "swap") and set(pred[1].qargs) == these_qubits:
+                            elif pred[1].name in ("cx", "zx90", "swap", "zz", "crecho") and set(pred[1].qargs) == these_qubits:
                                 sorted_pred = [pred[0]]
                             else:
                                 sorted_pred = pred
-                        if len(sorted_pred) == 2 and sorted_pred[0].name in ("cx", "zx90", "swap") and \
-                           sorted_pred[1].name in ("cx", "zx90", "swap"):
+                        if len(sorted_pred) == 2 and sorted_pred[0].name in ("cx", "zx90", "swap", "zz", "crecho") and \
+                           sorted_pred[1].name in ("cx", "zx90", "swap", "zz", "crecho"):
                             break  # stop immediately if we hit a pair of cx
                         # Examine each predecessor
                         for pnd in sorted_pred:
@@ -103,7 +103,7 @@ class Collect2qBlocks(AnalysisPass):
                                                     set(pnd.qargs))
                                 continue
                             # If a predecessor is a single qubit gate, add it
-                            if pnd.name not in ("cx", "zx90", "swap") and not pnd.op.is_parameterized():
+                            if pnd.name not in ("cx", "zx90", "swap", "zz", "crecho") and not pnd.op.is_parameterized():
                                 if not nodes_seen[pnd]:
                                     group.append(pnd)
                                     nodes_seen[pnd] = True
@@ -141,8 +141,8 @@ class Collect2qBlocks(AnalysisPass):
                     if len(succ) == 1 and not nodes_seen[succ[0]]:
                         snd = succ[0]
                         if snd.name in good_names and snd.condition is None:
-                            if (snd.name in ("cx", "zx90", "swap") and set(snd.qargs) == these_qubits) or \
-                                    snd.name not in ("cx", "zx90", "swap") and not snd.op.is_parameterized():
+                            if (snd.name in ("cx", "zx90", "swap", "zz", "crecho") and set(snd.qargs) == these_qubits) or \
+                                    snd.name not in ("cx", "zx90", "swap", "zz", "crecho") and not snd.op.is_parameterized():
                                 group.append(snd)
                                 nodes_seen[snd] = True
                                 succ_next.extend(dag.quantum_successors(snd))
@@ -157,15 +157,15 @@ class Collect2qBlocks(AnalysisPass):
                             # We need to avoid accidentally adding a cx on these_qubits
                             # since these must have a dependency through the other successor
                             # in this case
-                            if succ[0].name in ("cx", "zx90", "swap") and set(succ[0].qargs) == these_qubits:
+                            if succ[0].name in ("cx", "zx90", "swap", "zz", "crecho") and set(succ[0].qargs) == these_qubits:
                                 sorted_succ = [succ[1]]
-                            elif succ[1].name in ("cx", "zx90", "swap")  and set(succ[1].qargs) == these_qubits:
+                            elif succ[1].name in ("cx", "zx90", "swap", "zz", "crecho")  and set(succ[1].qargs) == these_qubits:
                                 sorted_succ = [succ[0]]
                             else:
                                 sorted_succ = succ
                         if len(sorted_succ) == 2 and \
-                           sorted_succ[0].name in ("cx", "zx90", "swap") and \
-                           sorted_succ[1].name in ("cx", "zx90", "swap"):
+                           sorted_succ[0].name in ("cx", "zx90", "swap", "zz", "crecho") and \
+                           sorted_succ[1].name in ("cx", "zx90", "swap", "zz", "crecho"):
                             break  # stop immediately if we hit a pair of cx
                         # Examine each successor
                         for snd in sorted_succ:
@@ -179,7 +179,7 @@ class Collect2qBlocks(AnalysisPass):
                             # If a successor is a single qubit gate, add it
                             # NB as we have eliminated all gates with names not in
                             # good_names, this check guarantees they are single qubit
-                            if snd.name not in ("cx", "zx90", "swap") and not snd.op.is_parameterized():
+                            if snd.name not in ("cx", "zx90", "swap", "zz", "crecho") and not snd.op.is_parameterized():
                                 if not nodes_seen[snd]:
                                     group.append(snd)
                                     nodes_seen[snd] = True
