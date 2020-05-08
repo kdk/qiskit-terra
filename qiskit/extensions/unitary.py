@@ -110,7 +110,7 @@ class UnitaryGate(Gate):
             theta, phi, lam = _DECOMPOSER1Q.angles(self.to_matrix())
             self.definition = [(U3Gate(theta, phi, lam), [q[0]], [])]
         elif self.num_qubits == 2:
-            self.definition = TwoQubitBasisDecomposer(ZZGate())(self.to_matrix()).data#two_qubit_cnot_decompose(self.to_matrix()).data
+            self.definition = TwoQubitBasisDecomposer(CREchoGate())(self.to_matrix()).data#two_qubit_cnot_decompose(self.to_matrix()).data
         else:
             q = QuantumRegister(self.num_qubits, "q")
             self.definition = [(isometry.Isometry(self.to_matrix(), 0, 0),

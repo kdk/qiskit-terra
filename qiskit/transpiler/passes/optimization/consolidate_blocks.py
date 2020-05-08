@@ -38,7 +38,7 @@ class ConsolidateBlocks(TransformationPass):
         collected by a previous pass, such as `Collect2qBlocks`.
     """
     def __init__(self,
-                 kak_basis_gate=ZZGate(),#ZX90Gate(),#CXGate(),
+                 kak_basis_gate=CREchoGate(),#CXGate(),
                  force_consolidate=True):#False):
         """ConsolidateBlocks initializer.
 
