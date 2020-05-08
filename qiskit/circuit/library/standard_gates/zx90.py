@@ -86,7 +86,7 @@ class ZX90Gate(Gate):
     def to_matrix(self):
         """Return a numpy.array for the CX gate."""
         sq2 = 1/np.sqrt(2)
-        return np.array([[       0,        0,       sq2, -1j * sq2],
-                         [       0,        0, -1j * sq2,       sq2],
-                         [     sq2, 1j * sq2,         0,         0],
-                         [1j * sq2,      sq2,         0,         0]], dtype=complex)
+        return np.array([[       sq2, -1j * sq2,        0,        0 ],
+                         [ -1j * sq2,       sq2,        0,        0 ],
+                         [         0,         0,      sq2, 1j * sq2 ],
+                         [         0,         0, 1j * sq2,      sq2 ]], dtype=complex)
