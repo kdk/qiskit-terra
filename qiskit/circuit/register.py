@@ -19,7 +19,6 @@ Base register reference object.
 """
 import re
 import itertools
-import numbers
 
 from qiskit.circuit.exceptions import CircuitError
 
@@ -118,17 +117,18 @@ class Register:
             CircuitError: if the `key` is not an integer.
             QiskitIndexError: if the `key` is not in the range `(0, self.size)`.
         """
-        if not isinstance(key, (numbers.Integral, slice, list)):
-            raise CircuitError("expected integer or slice index into register")
-        if isinstance(key, slice):
-            return self._bits[key]
-        elif isinstance(key, list):  # list of qubit indices
-            if max(key) < len(self):
+
+        try:
+            if isinstance(key, list):  # list of qubit indices
                 return [self._bits[idx] for idx in key]
             else:
-                raise CircuitError('register index out of range')
-        else:
-            return self._bits[key]
+                return self._bits[key]
+        except IndexError as err:
+            raise CircuitError('register index out of range') from err
+        except TypeError as err:
+            raise CircuitError("expected integer, list or slice index into "
+                               "register, got %s" % type(key)) from err
+
 
     def __iter__(self):
         for idx in range(self._size):
