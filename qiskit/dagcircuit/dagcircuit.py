@@ -609,37 +609,8 @@ class DAGCircuit:
             dag = copy.deepcopy(self)
         dag.global_phase += other.global_phase
 
-        # for nd in other.topological_nodes():
-        #     if nd.type == "in":
-        #         # if in edge_map, get new name, else use existing name
-        #         m_wire = edge_map.get(nd.wire, nd.wire)
-        #         # the mapped wire should already exist
-        #         if m_wire not in dag.output_map:
-        #             raise DAGCircuitError("wire %s[%d] not in self" % (
-        #                 m_wire.register.name, m_wire.index))
-        #         if nd.wire not in other._wires:
-        #             raise DAGCircuitError("inconsistent wire type for %s[%d] in other"
-        #                                   % (nd.register.name, nd.wire.index))
-        #     elif nd.type == "out":
-        #         # ignore output nodes
-        #         pass
-        #     elif nd.type == "op":
-        #         condition = dag._map_condition(edge_map, nd.condition)
-        #         dag._check_condition(nd.name, condition)
-        #         m_qargs = list(map(lambda x: edge_map.get(x, x), nd.qargs))
-        #         m_cargs = list(map(lambda x: edge_map.get(x, x), nd.cargs))
-        #         op = nd.op.copy()
-        #         op.condition = condition
-        #         dag.apply_operation_back(op, m_qargs, m_cargs)
-        #     else:
-        #         raise DAGCircuitError("bad node type %s" % nd.type)
-
-        # edge_map: dict[other_wire] => self_wire
-
-        moved_nodes = []
         def _node_map_func(nd):
             out = copy.copy(nd)
-            moved_nodes.append(out)
             if nd.type == "in":
                 # In nodes will be removed.
                 return out
@@ -653,7 +624,7 @@ class DAGCircuit:
                 dag._check_condition(nd.name, condition)
                 m_qargs = list(map(lambda x: edge_map.get(x, x), nd.qargs))
                 m_cargs = list(map(lambda x: edge_map.get(x, x), nd.cargs))
-                
+
                 out.condition = condition
                 out.qargs = m_qargs
                 out.cargs = m_cargs
@@ -663,23 +634,30 @@ class DAGCircuit:
 
         def _edge_map_func(edge):
             out = copy.copy(edge)
-            new = edge_map[edge['wire']]
+            new = edge_map[out['wire']]
             edge['name'] = "%s[%s]" % (new.register.name, new.index)
             edge['wire'] = new
             return edge
-            
+
+        node_map = {}
+        for in_wire, out_wire in edge_map.items():
+            this_node_id = self.output_map[out_wire]._node_id
+            edge_payload = {
+                'wire': out_wire,
+                'name': "%s[%s]" % (out_wire.register.name, out_wire.index),
+            }
+            other_node_id = other.input_map[in_wire]._node_id
+            node_map[this_node_id] = (other_node_id, edge_payload)
+
         ret_map = dag._multi_graph.compose(
             other=other._multi_graph,
-            node_map={self.output_map[out_wire]._node_id:
-                      (other.input_map[in_wire]._node_id, {'wire': out_wire, 'name': "%s[%s]" % (out_wire.register.name, out_wire.index)})
-             for in_wire, out_wire in edge_map.items()
-            },
+            node_map=node_map,
             node_map_func=_node_map_func,
             edge_map_func=_edge_map_func,
         )
 
-        for node in moved_nodes:
-            node._node_id = ret_map[node._node_id]
+        for node in ret_map.values():
+            dag._multi_graph[node]._node_id = node
 
         for in_wire, out_wire in edge_map.items():
             nd = self.output_map[out_wire]
@@ -696,13 +674,19 @@ class DAGCircuit:
                 condition=lambda edge1, edge2: edge1==edge2,
             )
 
-        rev_edge_map = { self_wire: other_wire for other_wire, self_wire in edge_map.items() }
+        rev_edge_map = {self_wire: other_wire for other_wire, self_wire in edge_map.items()}
+        new_output_map = {}
+        for wire, node in self.output_map.items():
+            if wire in rev_edge_map:
+                revised_edge_wire = rev_edge_map[wire]
+                old_other_output = other.output_map[revised_edge_wire]
+                out_val_node_id = ret_map[old_other_output._node_id]
+                out_val = dag._multi_graph[out_val_node_id]
+            else:
+                out_val = node
+            new_output_map[wire] = out_val
 
-        self.output_map = {
-            wire: self._multi_graph[ret_map[other.output_map[rev_edge_map[wire]]._node_id]] if wire in rev_edge_map else node
-            for wire, node in self.output_map.items()
-        }
-
+        self.output_map = new_output_map
         if not inplace:
             return dag
         else:
