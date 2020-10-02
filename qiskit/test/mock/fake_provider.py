@@ -74,6 +74,7 @@ class FakeProvider(BaseProvider):
                           FakeAthens(),
                           FakeBogota(),
                           FakeMontreal(),
+                          FakeNative2qMontreal(),
                           FakeToronto(),
                           FakeManhattan(),
                           FakeSantiago()]

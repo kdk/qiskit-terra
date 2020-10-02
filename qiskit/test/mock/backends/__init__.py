@@ -39,6 +39,7 @@ from .athens import FakeAthens
 from .rome import FakeRome
 from .bogota import FakeBogota
 from .montreal import FakeMontreal
+from .native_2q_montreal import FakeNative2qMontreal
 from .toronto import FakeToronto
 from .manhattan import FakeManhattan
 from .santiago import FakeSantiago
