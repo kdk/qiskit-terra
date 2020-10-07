@@ -17,3 +17,4 @@ from .unroller import Unroller
 from .unroll_custom_definitions import UnrollCustomDefinitions
 from .unroll_3q_or_more import Unroll3qOrMore
 from .basis_translator import BasisTranslator
+from .twoq_to_native_entangler import TwoQToNativeEntangler
