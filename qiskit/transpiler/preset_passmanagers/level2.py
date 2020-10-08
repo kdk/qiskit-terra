@@ -51,6 +51,8 @@ from qiskit.transpiler.passes import UnitarySynthesis
 from qiskit.transpiler.passes import TimeUnitAnalysis
 from qiskit.transpiler.passes import ALAPSchedule
 from qiskit.transpiler.passes import ASAPSchedule
+from qiskit.transpiler.passes import TwoQToNativeEntangler
+
 
 from qiskit.transpiler import TranspilerError
 
@@ -92,6 +94,8 @@ def level_2_pass_manager(pass_manager_config: PassManagerConfig) -> PassManager:
     instruction_durations = pass_manager_config.instruction_durations
     seed_transpiler = pass_manager_config.seed_transpiler
     backend_properties = pass_manager_config.backend_properties
+    gate_configurations = pass_manager_config.gate_configurations
+
 
     # 1. Search for a perfect layout, or choose a dense layout, if no layout given
     _given_layout = SetLayout(initial_layout)
@@ -197,6 +201,9 @@ def level_2_pass_manager(pass_manager_config: PassManagerConfig) -> PassManager:
         pm2.append(_direction, condition=_direction_condition)
     pm2.append(_reset)
     pm2.append(_depth_check + _opt, do_while=_opt_control)
+    pm2.append(TwoQToNativeEntangler(basis_gates, gate_configurations))
+    pm2.append(_depth_check + _opt, do_while=_opt_control)
+
     if scheduling_method:
         pm2.append(_scheduling)
 

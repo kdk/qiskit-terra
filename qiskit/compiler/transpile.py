@@ -433,6 +433,7 @@ def _parse_transpile_args(circuits, backend,
     optimization_level = _parse_optimization_level(optimization_level, num_circuits)
     output_name = _parse_output_name(output_name, circuits)
     callback = _parse_callback(callback, num_circuits)
+    gate_configurations = backend.configuration().gates
 
     list_transpile_args = []
     for args in zip(basis_gates, coupling_map, backend_properties, initial_layout,
@@ -448,7 +449,8 @@ def _parse_transpile_args(circuits, backend,
                                                                    translation_method=args[6],
                                                                    scheduling_method=args[7],
                                                                    instruction_durations=args[8],
-                                                                   seed_transpiler=args[9]),
+                                                                   seed_transpiler=args[9],
+                                                                   gate_configurations=gate_configurations),
                           'optimization_level': args[10],
                           'output_name': args[11],
                           'callback': args[12],

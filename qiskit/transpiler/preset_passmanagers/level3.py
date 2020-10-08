@@ -54,6 +54,7 @@ from qiskit.transpiler.passes import CheckCXDirection
 from qiskit.transpiler.passes import TimeUnitAnalysis
 from qiskit.transpiler.passes import ALAPSchedule
 from qiskit.transpiler.passes import ASAPSchedule
+from qiskit.transpiler.passes import TwoQToNativeEntangler
 
 from qiskit.transpiler import TranspilerError
 
@@ -95,6 +96,8 @@ def level_3_pass_manager(pass_manager_config: PassManagerConfig) -> PassManager:
     instruction_durations = pass_manager_config.instruction_durations
     seed_transpiler = pass_manager_config.seed_transpiler
     backend_properties = pass_manager_config.backend_properties
+    gate_configurations = pass_manager_config.gate_configurations
+
 
     # 1. Unroll to 1q or 2q gates
     _unroll3q = Unroll3qOrMore()
@@ -176,8 +179,8 @@ def level_3_pass_manager(pass_manager_config: PassManagerConfig) -> PassManager:
 
     _opt = [
         Collect2qBlocks(),
-        ConsolidateBlocks(basis_gates=basis_gates),
-        UnitarySynthesis(basis_gates),
+        ConsolidateBlocks(basis_gates=basis_gates, gate_configurations=gate_configurations),
+        UnitarySynthesis(basis_gates, gate_configurations=gate_configurations),
         Optimize1qGates(basis_gates),
         CommutativeCancellation(),
     ]
@@ -209,6 +212,9 @@ def level_3_pass_manager(pass_manager_config: PassManagerConfig) -> PassManager:
         pm3.append(_direction_check)
         pm3.append(_direction, condition=_direction_condition)
     pm3.append(_reset)
+    pm3.append(TwoQToNativeEntangler(basis_gates, gate_configurations))
+    pm3.append(_depth_check + _opt, do_while=_opt_control)
+
     if scheduling_method:
         pm3.append(_scheduling)
 

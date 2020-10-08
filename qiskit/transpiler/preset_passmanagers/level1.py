@@ -50,6 +50,7 @@ from qiskit.transpiler.passes import UnitarySynthesis
 from qiskit.transpiler.passes import TimeUnitAnalysis
 from qiskit.transpiler.passes import ALAPSchedule
 from qiskit.transpiler.passes import ASAPSchedule
+from qiskit.transpiler.passes import TwoQToNativeEntangler
 
 from qiskit.transpiler import TranspilerError
 
@@ -89,6 +90,7 @@ def level_1_pass_manager(pass_manager_config: PassManagerConfig) -> PassManager:
     instruction_durations = pass_manager_config.instruction_durations
     seed_transpiler = pass_manager_config.seed_transpiler
     backend_properties = pass_manager_config.backend_properties
+    gate_configurations = pass_manager_config.gate_configurations
 
     # 1. Use trivial layout if no layout given
     _given_layout = SetLayout(initial_layout)
@@ -202,6 +204,9 @@ def level_1_pass_manager(pass_manager_config: PassManagerConfig) -> PassManager:
         pm1.append(_direction, condition=_direction_condition)
     pm1.append(_reset)
     pm1.append(_depth_check + _opt, do_while=_opt_control)
+    pm1.append(TwoQToNativeEntangler(basis_gates, gate_configurations))
+    pm1.append(_depth_check + _opt, do_while=_opt_control)
+
     if scheduling_method:
         pm1.append(_scheduling)
 
