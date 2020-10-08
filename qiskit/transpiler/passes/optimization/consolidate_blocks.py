@@ -41,28 +41,55 @@ class ConsolidateBlocks(TransformationPass):
     def __init__(self,
                  kak_basis_gate=None,
                  force_consolidate=False,
-                 basis_gates=None):
+                 basis_gates=None,
+                 gate_configurations=None):
         """ConsolidateBlocks initializer.
 
         Args:
             kak_basis_gate (Gate): Basis gate for KAK decomposition.
             force_consolidate (bool): Force block consolidation
             basis_gates (List(str)): Basis gates from which to choose a KAK gate.
+            gate_configurationss (List(GateConfig)):
         """
         super().__init__()
         self.basis_gates = basis_gates
         self.force_consolidate = force_consolidate
+        self.gate_configurations = gate_configurations
+
+        self.native_entanglers = {}
+        self.native_decomposers = {}
+
+        if gate_configurations is not None:
+            self.global_decomposer = None
+
+            self.native_entanglers = {
+                tuple(gate.coupling_map[0]): QuantumCircuit.from_qasm_str(
+                    QuantumCircuit.header
+                    + QuantumCircuit.extension_lib
+                    + gate.qasm_def
+                    + 'qreg q[2]; n2q q[0],q[1];')
+                for gate in gate_configurations
+                if gate.name == 'n2q'
+            }
+
+            for qargs in self.native_entanglers:
+                self.native_entanglers[qargs].name = 'n2q'
+
+            self.native_decomposers = {
+               qargs: TwoQubitBasisDecomposer(entangler)
+                for qargs, entangler in self.native_entanglers.items()
+            }
 
         if kak_basis_gate is not None:
-            self.decomposer = TwoQubitBasisDecomposer(kak_basis_gate)
+            self.global_decomposer = TwoQubitBasisDecomposer(kak_basis_gate)
         elif basis_gates is not None:
             kak_basis_gate = unitary_synthesis._choose_kak_gate(basis_gates)
             if kak_basis_gate is not None:
-                self.decomposer = TwoQubitBasisDecomposer(kak_basis_gate)
+                self.global_decomposer = TwoQubitBasisDecomposer(kak_basis_gate)
             else:
-                self.decomposer = None
+                self.global_decomposer = None
         else:
-            self.decomposer = TwoQubitBasisDecomposer(CXGate())
+            self.global_decomposer = TwoQubitBasisDecomposer(CXGate())
 
     def run(self, dag):
         """Run the ConsolidateBlocks pass on `dag`.
@@ -71,7 +98,7 @@ class ConsolidateBlocks(TransformationPass):
         on the same wires.
         """
 
-        if self.decomposer is None:
+        if self.global_decomposer is None and not self.native_decomposers:
             return dag
 
         new_dag = dag._copy_circuit_metadata()
@@ -109,8 +136,14 @@ class ConsolidateBlocks(TransformationPass):
                 blocks = blocks[:block_count] + [[node]] + blocks[block_count:]
 
         # create the dag from the updated list of blocks
-        basis_gate_name = self.decomposer.gate.name
         for block in blocks:
+            if self.native_decomposers and len(block[0].qargs) == 2:
+                basis_gate_name = 'n2q'
+                decomposer = self.native_decomposers[tuple(q.index for q in block[0].qargs)]
+            else:
+                basis_gate_name = self.global_decomposer.gate.name
+                decomposer = self.global_decomposer
+
             if len(block) == 1 and (block[0].name != basis_gate_name
                                     or block[0].op.is_parameterized()):
                 # an intermediate node that was added into the overall list
@@ -145,7 +178,7 @@ class ConsolidateBlocks(TransformationPass):
                 if (  # pylint: disable=too-many-boolean-expressions
                         self.force_consolidate
                         or unitary.num_qubits > 2
-                        or self.decomposer.num_basis_gates(unitary) < basis_count
+                        or decomposer.num_basis_gates(unitary) < basis_count
                         or len(subcirc) > max_2q_depth
                         or (self.basis_gates is not None
                             and not set(subcirc.count_ops()).issubset(self.basis_gates))

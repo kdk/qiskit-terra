@@ -22,6 +22,7 @@ from qiskit.circuit.library.standard_gates import iSwapGate, CXGate, CZGate, RXX
 from qiskit.extensions.quantum_initializer import isometry
 from qiskit.quantum_info.synthesis.one_qubit_decompose import OneQubitEulerDecomposer
 from qiskit.quantum_info.synthesis.two_qubit_decompose import TwoQubitBasisDecomposer
+from qiskit.circuit import QuantumCircuit
 
 
 def _choose_kak_gate(basis_gates):
@@ -66,7 +67,7 @@ def _choose_euler_basis(basis_gates):
 class UnitarySynthesis(TransformationPass):
     """Synthesize gates according to their basis gates."""
 
-    def __init__(self, basis_gates: List[str]):
+    def __init__(self, basis_gates: List[str], gate_configurations=None):
         """SynthesizeUnitaries initializer.
 
         Args:
@@ -74,6 +75,31 @@ class UnitarySynthesis(TransformationPass):
         """
         super().__init__()
         self._basis_gates = basis_gates
+        self._gate_configurations = gate_configurations
+
+        if self._gate_configurations is not None:
+            self.native_entanglers = {
+                tuple(gate.coupling_map[0]): QuantumCircuit.from_qasm_str(
+                        QuantumCircuit.header
+                        + QuantumCircuit.extension_lib
+                        + gate.qasm_def
+                        + 'qreg q[2]; n2q q[0],q[1];')
+                for gate in gate_configurations
+                if gate.name == 'n2q'
+            }
+
+            for qargs in self.native_entanglers:
+                self.native_entanglers[qargs].name = 'n2q'
+
+            self.native_decomposers = {
+                qargs: TwoQubitBasisDecomposer(
+                    entangler,
+                    euler_basis=_choose_euler_basis(self._basis_gates))
+                for qargs, entangler in self.native_entanglers.items()
+            }
+        else:
+            self.native_entanglers = {}
+            self.native_decomposers = {}
 
     def run(self, dag: DAGCircuit) -> DAGCircuit:
         """Run the UnitarySynthesis pass on `dag`.
@@ -90,10 +116,12 @@ class UnitarySynthesis(TransformationPass):
         decomposer1q, decomposer2q = None, None
         if euler_basis is not None:
             decomposer1q = OneQubitEulerDecomposer(euler_basis)
-        if kak_gate is not None:
-            decomposer2q = TwoQubitBasisDecomposer(kak_gate, euler_basis=euler_basis)
 
         for node in dag.named_nodes('unitary'):
+            if self.native_decomposers:
+                decomposer2q = self.native_decomposers[tuple(q.index for q in node.qargs)]
+            elif kak_gate is not None:
+                decomposer2q = TwoQubitBasisDecomposer(kak_gate, euler_basis=euler_basis)
 
             synth_dag = None
             if len(node.qargs) == 1:
