@@ -13,6 +13,8 @@
 """
 Quantum bit and Classical bit objects.
 """
+import warnings
+
 from qiskit.circuit.exceptions import CircuitError
 
 
@@ -31,6 +33,11 @@ class Bit:
             # algorithm (only new-style Bits), call default object hash method.
             self._hash = object.__hash__(self)
         else:
+            warnings.warn('Back-references to from Bit instances to their containing '
+                          'Registers have been deprecated. Instead, query Registers '
+                          'to find their contained Bits.',
+                          DeprecationWarning, stacklevel=2)
+
             try:
                 index = int(index)
             except Exception:
@@ -59,6 +66,11 @@ class Bit:
         if (self._register, self._index) == (None, None):
             raise CircuitError('Attmped to query register of a new-style Bit.')
 
+        warnings.warn('Back-references to from Bit instances to their containing '
+                      'Registers have been deprecated. Instead, query Registers '
+                      'to find their contained Bits.',
+                      DeprecationWarning, stacklevel=2)
+
         return self._register
 
     @register.setter
@@ -66,6 +78,11 @@ class Bit:
         """Set bit's register."""
         if (self._register, self._index) == (None, None):
             raise CircuitError('Attmped to set register of a new-style Bit.')
+
+        warnings.warn('Back-references to from Bit instances to their containing '
+                      'Registers have been deprecated. Instead, query Registers '
+                      'to find their contained Bits.',
+                      DeprecationWarning, stacklevel=2)
 
         self._register = value
         self._update_hash()
@@ -76,6 +93,11 @@ class Bit:
         if (self._register, self._index) == (None, None):
             raise CircuitError('Attmped to query index of a new-style Bit.')
 
+        warnings.warn('Back-references to from Bit instances to their containing '
+                      'Registers have been deprecated. Instead, query Registers '
+                      'to find their contained Bits.',
+                      DeprecationWarning, stacklevel=2)
+
         return self._index
 
     @index.setter
@@ -83,6 +105,11 @@ class Bit:
         """Set bit's index."""
         if (self._register, self._index) == (None, None):
             raise CircuitError('Attmped to query index of a new-style Bit.')
+
+        warnings.warn('Back-references to from Bit instances to their containing '
+                      'Registers have been deprecated. Instead, query Registers '
+                      'to find their contained Bits.',
+                      DeprecationWarning, stacklevel=2)
 
         self._index = value
         self._update_hash()

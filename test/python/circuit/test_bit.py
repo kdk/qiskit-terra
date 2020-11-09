@@ -135,3 +135,28 @@ class TestNewStyleBit(QiskitTestCase):
         self.assertEqual(bit1, bit1)
         self.assertNotEqual(bit1, bit2)
         self.assertNotEqual(bit1, 3.14)
+
+    def test_bit_constructor_register_deprecated(self):
+        """Verify we raise a deprecation warning if a register is specified."""
+
+        qr = quantumregister.QuantumRegister(5, 'test_qr')
+        with self.assertWarnsRegex(DeprecationWarning, 'deprecated'):
+            quantumregister.Qubit(qr, 3)
+
+    def test_bit_register_backreferences_deprecated(self):
+        """Verify we raise a deprecation warning for register back-references."""
+
+        qr = quantumregister.QuantumRegister(3, 'test_qr')
+        qubit = qr[0]
+
+        with self.assertWarnsRegex(DeprecationWarning, 'deprecated'):
+            _ = qubit.index
+
+        with self.assertWarnsRegex(DeprecationWarning, 'deprecated'):
+            qubit.index = 1
+
+        with self.assertWarnsRegex(DeprecationWarning, 'deprecated'):
+            _ = qubit.register
+
+        with self.assertWarnsRegex(DeprecationWarning, 'deprecated'):
+            qubit.register = qr
