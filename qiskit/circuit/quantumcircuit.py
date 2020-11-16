@@ -1063,15 +1063,15 @@ class QuantumCircuit:
         """Raise exception if a qarg is not in this circuit or bad format."""
         if not all(isinstance(i, Qubit) for i in qargs):
             raise CircuitError("qarg is not a Qubit")
-        if not all(self.has_register(i.register) for i in qargs):
-            raise CircuitError("register not in this circuit")
+        if not set(qargs).issubset(self.qubits):
+            raise CircuitError("qargs not in this circuit")
 
     def _check_cargs(self, cargs):
         """Raise exception if clbit is not in this circuit or bad format."""
         if not all(isinstance(i, Clbit) for i in cargs):
             raise CircuitError("carg is not a Clbit")
-        if not all(self.has_register(i.register) for i in cargs):
-            raise CircuitError("register not in this circuit")
+        if not set(cargs).issubset(self.clbits):
+            raise CircuitError("cargs not in this circuit")
 
     def to_instruction(self, parameter_map=None):
         """Create an Instruction out of this circuit.
