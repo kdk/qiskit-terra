@@ -304,22 +304,22 @@ class TestDagApplyOperation(QiskitTestCase):
             sorted(self.dag._multi_graph.in_edges(h_node._node_id)),
             sorted([
                 (self.dag.input_map[self.qubit2]._node_id, h_node._node_id,
-                 {'wire': self.qubit2, 'name': 'qr[2]'}),
+                 {'wire': self.qubit2}),
                 (self.dag.input_map[self.clbit0]._node_id, h_node._node_id,
-                 {'wire': self.clbit0, 'name': 'cr[0]'}),
+                 {'wire': self.clbit0}),
                 (self.dag.input_map[self.clbit1]._node_id, h_node._node_id,
-                 {'wire': self.clbit1, 'name': 'cr[1]'}),
+                 {'wire': self.clbit1}),
             ]))
 
         self.assertEqual(
             sorted(self.dag._multi_graph.out_edges(h_node._node_id)),
             sorted([
                 (h_node._node_id, self.dag.output_map[self.qubit2]._node_id,
-                 {'wire': self.qubit2, 'name': 'qr[2]'}),
+                 {'wire': self.qubit2}),
                 (h_node._node_id, self.dag.output_map[self.clbit0]._node_id,
-                 {'wire': self.clbit0, 'name': 'cr[0]'}),
+                 {'wire': self.clbit0}),
                 (h_node._node_id, self.dag.output_map[self.clbit1]._node_id,
-                 {'wire': self.clbit1, 'name': 'cr[1]'}),
+                 {'wire': self.clbit1}),
             ]))
 
         self.assertTrue(rx.is_directed_acyclic_graph(self.dag._multi_graph))
@@ -346,22 +346,22 @@ class TestDagApplyOperation(QiskitTestCase):
             sorted(self.dag._multi_graph.in_edges(meas_node._node_id)),
             sorted([
                 (self.dag.input_map[self.qubit0]._node_id, meas_node._node_id,
-                 {'wire': self.qubit0, 'name': 'qr[0]'}),
+                 {'wire': self.qubit0}),
                 (self.dag.input_map[self.clbit0]._node_id, meas_node._node_id,
-                 {'wire': self.clbit0, 'name': 'cr[0]'}),
+                 {'wire': self.clbit0}),
                 (self.dag.input_map[new_creg[0]]._node_id, meas_node._node_id,
-                 {'wire': Clbit(new_creg, 0), 'name': 'cr2[0]'}),
+                 {'wire': Clbit(new_creg, 0)}),
             ]))
 
         self.assertEqual(
             sorted(self.dag._multi_graph.out_edges(meas_node._node_id)),
             sorted([
                 (meas_node._node_id, self.dag.output_map[self.qubit0]._node_id,
-                 {'wire': self.qubit0, 'name': 'qr[0]'}),
+                 {'wire': self.qubit0}),
                 (meas_node._node_id, self.dag.output_map[self.clbit0]._node_id,
-                 {'wire': self.clbit0, 'name': 'cr[0]'}),
+                 {'wire': self.clbit0}),
                 (meas_node._node_id, self.dag.output_map[new_creg[0]]._node_id,
-                 {'wire': Clbit(new_creg, 0), 'name': 'cr2[0]'}),
+                 {'wire': Clbit(new_creg, 0)}),
             ]))
 
         self.assertTrue(rx.is_directed_acyclic_graph(self.dag._multi_graph))
@@ -385,22 +385,22 @@ class TestDagApplyOperation(QiskitTestCase):
             sorted(self.dag._multi_graph.in_edges(meas_node._node_id)),
             sorted([
                 (self.dag.input_map[self.qubit1]._node_id, meas_node._node_id,
-                 {'wire': self.qubit1, 'name': 'qr[1]'}),
+                 {'wire': self.qubit1}),
                 (self.dag.input_map[self.clbit0]._node_id, meas_node._node_id,
-                 {'wire': self.clbit0, 'name': 'cr[0]'}),
+                 {'wire': self.clbit0}),
                 (self.dag.input_map[self.clbit1]._node_id, meas_node._node_id,
-                 {'wire': self.clbit1, 'name': 'cr[1]'}),
+                 {'wire': self.clbit1}),
             ]))
 
         self.assertEqual(
             sorted(self.dag._multi_graph.out_edges(meas_node._node_id)),
             sorted([
                 (meas_node._node_id, self.dag.output_map[self.qubit1]._node_id,
-                 {'wire': self.qubit1, 'name': 'qr[1]'}),
+                 {'wire': self.qubit1}),
                 (meas_node._node_id, self.dag.output_map[self.clbit0]._node_id,
-                 {'wire': self.clbit0, 'name': 'cr[0]'}),
+                 {'wire': self.clbit0}),
                 (meas_node._node_id, self.dag.output_map[self.clbit1]._node_id,
-                 {'wire': self.clbit1, 'name': 'cr[1]'}),
+                 {'wire': self.clbit1}),
             ]))
 
         self.assertTrue(rx.is_directed_acyclic_graph(self.dag._multi_graph))
@@ -604,22 +604,26 @@ class TestDagNodeSelection(QiskitTestCase):
 
         named_nodes = self.dag.topological_nodes()
 
-        expected = [('qr[0]', []),
-                    ('qr[1]', []),
+        qr = self.dag.qregs['qr']
+        cr = self.dag.cregs['cr']
+        expected = [(qr[0], []),
+                    (qr[1], []),
                     ('cx', [self.qubit0, self.qubit1]),
                     ('h', [self.qubit0]),
-                    ('qr[2]', []),
+                    (qr[2], []),
                     ('cx', [self.qubit2, self.qubit1]),
                     ('cx', [self.qubit0, self.qubit2]),
                     ('h', [self.qubit2]),
-                    ('qr[0]', []),
-                    ('qr[1]', []),
-                    ('qr[2]', []),
-                    ('cr[0]', []),
-                    ('cr[0]', []),
-                    ('cr[1]', []),
-                    ('cr[1]', [])]
-        self.assertEqual(expected, [(i.name, i.qargs) for i in named_nodes])
+                    (qr[0], []),
+                    (qr[1], []),
+                    (qr[2], []),
+                    (cr[0], []),
+                    (cr[0], []),
+                    (cr[1], []),
+                    (cr[1], [])]
+        self.assertEqual([(i.name if i.type == 'op' else i.wire, i.qargs)
+                          for i in named_nodes],
+                         expected)
 
     def test_topological_op_nodes(self):
         """The topological_op_nodes() method"""
@@ -935,7 +939,7 @@ class TestDagLayers(QiskitTestCase):
         qr = QuantumRegister(1, 'q0')
 
         # the order the nodes should be in
-        truth = [('in', 'q0[0]', 0), ('op', 'x', 2), ('op', 'id', 3), ('out', 'q0[0]', 1)]
+        truth = [('in', qr[0], 0), ('op', 'x', 2), ('op', 'id', 3), ('out', qr[0], 1)]
 
         # this only occurred sometimes so has to be run more than once
         # (10 times seemed to always be enough for this bug to show at least once)
@@ -946,7 +950,8 @@ class TestDagLayers(QiskitTestCase):
             dag1 = list(dag.layers())[0]['graph']
             dag1.apply_operation_back(IGate(), [qr[0]], [])
 
-            comp = [(nd.type, nd.name, nd._node_id) for nd in dag1.topological_nodes()]
+            comp = [(nd.type, nd.name if nd.type == 'op' else nd.wire, nd._node_id)
+                    for nd in dag1.topological_nodes()]
             self.assertEqual(comp, truth)
 
 

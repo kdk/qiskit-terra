@@ -1,0 +1,6 @@
+---
+other:
+  - |
+    The `name` attribute has been removed from :class:`~qiskit.dagcircuit.DAGCircuit`
+    edges. The `wire` attribute remains and can be used to determine and label DAGCircuit
+    edges.
