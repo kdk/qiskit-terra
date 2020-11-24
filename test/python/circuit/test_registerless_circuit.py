@@ -98,6 +98,16 @@ class TestAddingBitsWithoutRegisters(QiskitTestCase):
         self.assertEqual(qc.qubits, list(qr) + [new_bit])
         self.assertEqual(qc.qregs, [qr])
 
+    def test_deprecation_warn_on_first_register_access(self):
+        pass
+        # unset
+
+        # non-int circuit doesn't raise
+
+        # int circuit raises on first access
+
+        # but not on second access
+
 
 class TestGatesOnWires(QiskitTestCase):
     """Test gates on wires."""
