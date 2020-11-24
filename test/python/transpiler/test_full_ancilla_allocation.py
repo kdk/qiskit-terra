@@ -138,14 +138,13 @@ class TestFullAncillaAllocation(QiskitTestCase):
         pass_.property_set['layout'] = initial_layout
         pass_.run(dag)
         after_layout = pass_.property_set['layout']
+        after_ancilla_register = pass_.property_set['layout_ancilla_register']
 
-        qregs = {v.register for v in after_layout.get_virtual_bits().keys()}
-        self.assertEqual(2, len(qregs))
-        self.assertIn(qr_ancilla, qregs)
-        qregs.remove(qr_ancilla)
-        other_reg = qregs.pop()
-        self.assertEqual(len(other_reg), 2)
-        self.assertRegex(other_reg.name, r'^ancilla\d+$')
+        self.assertTrue(all(qubit in qr_ancilla or qubit in after_ancilla_register
+                            for qubit in after_layout.get_virtual_bits()))
+
+        self.assertEqual(len(after_ancilla_register), 2)
+        self.assertRegex(after_ancilla_register.name, r'^ancilla\d+$')
 
     def test_bad_layout(self):
         """Layout referes to a register that do not exist in the circuit
