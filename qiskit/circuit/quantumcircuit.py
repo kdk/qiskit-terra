@@ -147,8 +147,6 @@ class QuantumCircuit:
     header = "OPENQASM 2.0;"
     extension_lib = "include \"qelib1.inc\";"
 
-    _implicit_register_declaration_deprecation_shown = False
-
     def __init__(self, *regs, name=None, global_phase=0, metadata=None):
         if any([not isinstance(reg, (list, QuantumRegister, ClassicalRegister)) for reg in regs]):
             # check if inputs are integers, but also allow e.g. 2.0
@@ -180,10 +178,6 @@ class QuantumCircuit:
         # in the order they were applied.
         self._data = []
 
-        # Flag cases when user creates an implicit 'q'/'c' register from integer
-        # initialization so that we raise DeprecationWarning on register access.
-        self._add_reg_from_int = False
-
         # This is a map of registers bound to this circuit, by name.
         self._qregs = []
         self._cregs = []
@@ -208,9 +202,6 @@ class QuantumCircuit:
 
     @property
     def qregs(self):
-        if self._add_reg_from_int and not QuantumCircuit._implicit_register_declaration_deprecation_shown:
-            warnings.warn('Initializing a QuantumCircuit instance with either a single or pair of integers previously implicitly created a QuantumRegister("q") and optionally ClassicalRegister("c"). This behavior has been deprecated and will be removed in a future release. In the future, initializing a QuantumCircuit from a number of qubits/clbits will create a circuit with the correct number of registerless qubits, and without the implict "q"/"c" registers.', DeprecationWarning)
-            QuantumCircuit._implicit_register_declaration_deprecation_shown = True
         return self._qregs
 
     @qregs.setter
@@ -219,9 +210,6 @@ class QuantumCircuit:
 
     @property
     def cregs(self):
-        if self._add_reg_from_int and not QuantumCircuit._implicit_register_declaration_deprecation_shown:
-            warnings.warn('Initializing a QuantumCircuit instance with either a single or pair of integers previously implicitly created a QuantumRegister("q") and optionally ClassicalRegister("c"). This behavior has been deprecated and will be removed in a future release. In the future, initializing a QuantumCircuit from a number of qubits/clbits will create a circuit with the correct number of registerless qubits, and without the implict "q"/"c" registers.', DeprecationWarning)
-            QuantumCircuit._implicit_register_declaration_deprecation_shown = True
         return self._cregs
 
     @cregs.setter
@@ -1033,14 +1021,13 @@ class QuantumCircuit:
             return
 
         if any([isinstance(reg, int) for reg in regs]):
-            self._add_reg_from_int = True
             # QuantumCircuit defined without registers
             if len(regs) == 1 and isinstance(regs[0], int):
                 # QuantumCircuit with anonymous quantum wires e.g. QuantumCircuit(2)
-                regs = (QuantumRegister(regs[0], 'q'),)
+                regs = [[Qubit() for _ in range(regs[0])]]
             elif len(regs) == 2 and all([isinstance(reg, int) for reg in regs]):
                 # QuantumCircuit with anonymous wires e.g. QuantumCircuit(2, 3)
-                regs = (QuantumRegister(regs[0], 'q'), ClassicalRegister(regs[1], 'c'))
+                regs = [[Qubit() for _ in range(regs[0])], [Clbit() for _ in range(regs[1])]]
             else:
                 raise CircuitError("QuantumCircuit parameters can be Registers or Integers."
                                    " If Integers, up to 2 arguments. QuantumCircuit was called"
