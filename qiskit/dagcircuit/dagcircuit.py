@@ -573,31 +573,6 @@ class DAGCircuit:
             new_condition = (new_creg, new_cond_val)
         return new_condition
 
-    def extend_back(self, dag, edge_map=None):
-        """DEPRECATED: Add `dag` at the end of `self`, using `edge_map`.
-        """
-        warnings.warn("dag.extend_back is deprecated, please use dag.compose.",
-                      DeprecationWarning, stacklevel=2)
-        edge_map = edge_map or {}
-        for qreg in dag.qregs.values():
-            if qreg.name not in self.qregs:
-                self.add_qreg(QuantumRegister(qreg.size, qreg.name))
-            edge_map.update([(qbit, qbit) for qbit in qreg if qbit not in edge_map])
-
-        for creg in dag.cregs.values():
-            if creg.name not in self.cregs:
-                self.add_creg(ClassicalRegister(creg.size, creg.name))
-            edge_map.update([(cbit, cbit) for cbit in creg if cbit not in edge_map])
-
-        self.compose_back(dag, edge_map)
-
-    def compose_back(self, input_circuit, edge_map=None):
-        """DEPRECATED: use DAGCircuit.compose() instead.
-        """
-        warnings.warn("dag.compose_back is deprecated, please use dag.compose.",
-                      DeprecationWarning, stacklevel=2)
-        self.compose(input_circuit, edge_map)
-
     def compose(self, other, edge_map=None, qubits=None, clbits=None, front=False, inplace=True):
         """Compose the ``other`` circuit onto the output of this circuit.
 
