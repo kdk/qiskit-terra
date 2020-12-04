@@ -130,6 +130,32 @@ class BaseQiskitTestCase(unittest.TestCase):
             msg = self._formatMessage(msg, error_msg)
             raise self.failureException(msg)
 
+    def assertCircuitsEqual(self, actual, expected):
+        result = (actual == expected)
+        if not result:
+            msg = "\n"
+            msg += "Global phase: {}\n".format(actual.global_phase == expected.global_phase)
+            msg += "Calibrations: {}\n".format(actual.calibrations == expected.calibrations)
+            msg += "Qregs: {}\n".format(actual.qregs == expected.qregs)
+            msg += "Cregs: {}\n".format(actual.cregs == expected.cregs)
+            #nodes = actual._dag.topological_nodes()
+            msg += "Actual:\n{actual}\nExpected:\n{expected}\n".format(actual=actual, expected=expected)
+            raise self.failureException(msg)
+
+    def assertDAGCircuitsEqual(self, actual, expected):
+        result = (actual == expected)
+        if not result:
+            from qiskit.converters import dag_to_circuit
+            msg = "\n"
+            msg += "Global phase: {}\n".format(actual.global_phase == expected.global_phase)
+            msg += "Calibrations: {}\n".format(actual.calibrations == expected.calibrations)
+            msg += "Qregs: {}\n".format(actual.qregs == expected.qregs)
+            msg += "Cregs: {}\n".format(actual.cregs == expected.cregs)
+            #nodes = actual._dag.topological_nodes()
+            msg += "Actual:\n{actual}\nExpected:\n{expected}\n".format(
+                actual=dag_to_circuit(actual), expected=dag_to_circuit(expected))
+            raise self.failureException(msg)
+
 
 class BasicQiskitTestCase(BaseQiskitTestCase):
     """Helper class that contains common functionality."""
