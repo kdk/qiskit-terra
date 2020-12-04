@@ -110,11 +110,7 @@ class Register:
                                    "register type. bits=%s" % bits)
             self._bits = list(bits)
         else:
-            self._bits = [self.bit_type(self, idx) for idx in range(size)]
-
-    def _update_bits_hash(self):
-        for bit in self._bits:
-            bit._update_hash()
+            self._bits = [self.bit_type() for _ in range(size)]
 
     @property
     def name(self):
@@ -130,7 +126,6 @@ class Register:
         self._name = value
         self._hash = hash((type(self), self._name, self._size))
         self._repr = "%s(%d, '%s')" % (self.__class__.__qualname__, self.size, self.name)
-        self._update_bits_hash()
 
     @property
     def size(self):
@@ -143,7 +138,6 @@ class Register:
         self._size = value
         self._hash = hash((type(self), self._name, self._size))
         self._repr = "%s(%d, '%s')" % (self.__class__.__qualname__, self.size, self.name)
-        self._update_bits_hash()
 
     def __repr__(self):
         """Return the official string representing the register."""
@@ -203,12 +197,9 @@ class Register:
         if type(self) is type(other) and \
                 self._repr == other._repr and \
                 all(
-                        # For new-style bits, check bitwise equality.
-                        sbit == obit
-                        for sbit, obit in zip(self, other)
-                        if None in
-                        (sbit._register, sbit._index,
-                         obit._register, obit._index)
+                    # For new-style bits, check bitwise equality.
+                    sbit == obit
+                    for sbit, obit in zip(self, other)
                 ):
             res = True
         return res

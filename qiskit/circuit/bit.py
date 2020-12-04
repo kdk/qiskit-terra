@@ -20,6 +20,7 @@ from qiskit.circuit.exceptions import CircuitError
 
 class Bit:
     """Implement a generic bit."""
+<<<<<<< HEAD
 
     __slots__ = {'_register', '_index', '_hash', '_repr'}
 
@@ -132,3 +133,6 @@ class Bit:
             return self._repr == other._repr
         except AttributeError:
             return False
+=======
+    pass
+>>>>>>> 25d4f3f745... Remove deprecated Bit properties.

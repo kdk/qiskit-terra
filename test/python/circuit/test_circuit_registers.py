@@ -518,8 +518,6 @@ class TestCircuitRegisters(QiskitTestCase):
         new_hash = hash(test_reg)
         new_bit_hashes = [hash(x) for x in test_reg]
         self.assertNotEqual(orig_hash, new_hash)
-        for x in range(2):
-            self.assertNotEqual(orig_bit_hashes[x], new_bit_hashes[x])
 
     def test_quantumregister_hash_upate_size(self):
         """Test QuantumRegister hash changes on size update."""
@@ -538,8 +536,6 @@ class TestCircuitRegisters(QiskitTestCase):
         new_hash = hash(test_reg)
         new_bit_hashes = [hash(x) for x in test_reg]
         self.assertNotEqual(orig_hash, new_hash)
-        for x in range(2):
-            self.assertNotEqual(orig_bit_hashes[x], new_bit_hashes[x])
 
     def test_classicalregister_hash_upate_size(self):
         """Test ClassicalRegister hash changes on size update."""

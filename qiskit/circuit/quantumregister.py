@@ -22,24 +22,7 @@ from .bit import Bit
 
 class Qubit(Bit):
     """Implement a quantum bit."""
-
-    def __init__(self, register=None, index=None):
-        """Creates a qubit.
-
-        Args:
-            register (QuantumRegister): Deprecated. A quantum register containing the bit.
-            index (int): Deprecated. The index of the bit in its containing register.
-
-        Raises:
-            CircuitError: if the provided register is not a valid :class:`QuantumRegister`
-        """
-
-        if register is None or isinstance(register, QuantumRegister):
-            super().__init__(register, index)
-        else:
-            raise CircuitError('Qubit needs a QuantumRegister and %s was provided' %
-                               type(register).__name__)
-
+    pass
 
 class QuantumRegister(Register):
     """Implement a quantum register."""
