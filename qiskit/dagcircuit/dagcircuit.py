@@ -853,7 +853,9 @@ class DAGCircuit:
                               for regname, reg in other.cregs.items()]
 
         if (
-                self_qreg_indices != other_qreg_indices
+                self.global_phase != other.global_phase
+                or self.calibrations != other.calibrations
+                or self_qreg_indices != other_qreg_indices
                 or self_creg_indices != other_creg_indices
         ):
             return False
