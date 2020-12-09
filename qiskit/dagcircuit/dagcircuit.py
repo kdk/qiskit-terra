@@ -477,13 +477,13 @@ class DAGCircuit:
 
         inbound_bits = set(inbound_wires)
         for inbound_reg in inbound_regs:
-            reg_bits = set(inbound_reg)
+            mapped_bits = inbound_bits.intersection(inbound_reg)
 
-            if reg_bits.issubset(inbound_bits):
+            if len(mapped_bits) == len(inbound_reg):
                 # All regbits are mapped by inbound_bits.
                 continue
 
-            if reg_bits.intersection(inbound_bits):
+            if len(mapped_bits) > 0:
                 raise DAGCircuitError("inbound_wires fragments reg %s" % inbound_reg)
 
             if (
