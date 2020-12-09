@@ -474,30 +474,26 @@ class DAGCircuit:
             DAGCircuitError: if the wiremap fragments, or duplicates exist
         """
         add_regs = set()
-        reg_frag_chk = {}
 
+        inbound_bits = set(inbound_wires)
         for inbound_reg in inbound_regs:
-            reg_frag_chk[inbound_reg] = {reg_bit: False for reg_bit in inbound_reg}
+            reg_bits = set(inbound_reg)
 
-        for inbound_bit in inbound_wires:
-            for inbound_reg in inbound_regs:
-                if inbound_bit in inbound_reg:
-                    reg_frag_chk[inbound_reg][inbound_bit] = True
-                    break
+            if reg_bits.issubset(inbound_bits):
+                # All regbits are mapped by inbound_bits.
+                continue
 
-        for inbound_reg, v in reg_frag_chk.items():
-            s = set(v.values())
-            if len(s) == 2:
+            if reg_bits.intersection(inbound_bits):
                 raise DAGCircuitError("inbound_wires fragments reg %s" % inbound_reg)
-            if s == {False}:
-                if (
-                        inbound_reg.name in self.qregs
-                        or inbound_reg.name in self.cregs
-                ):
-                    raise DAGCircuitError("unmapped duplicate reg %s" % inbound_reg)
 
-                # Add registers that appear only in inbound_regs
-                add_regs.add(inbound_reg)
+            if (
+                    inbound_reg.name in self.qregs
+                    or inbound_reg.name in self.cregs
+            ):
+                raise DAGCircuitError("unmapped duplicate reg %s" % inbound_reg)
+
+            # Add registers that appear only in inbound_regs
+            add_regs.add(inbound_reg)
 
         return add_regs
 
