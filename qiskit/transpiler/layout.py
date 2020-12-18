@@ -29,6 +29,7 @@ class Layout():
     def __init__(self, input_dict=None):
         """construct a Layout from a bijective dictionary, mapping
         virtual qubits to physical qubits"""
+        self._regs = []
         self._p2v = {}
         self._v2p = {}
         if input_dict is not None:
@@ -166,6 +167,7 @@ class Layout():
         Args:
             reg (Register): A (qu)bit Register. For example, QuantumRegister(3, 'qr').
         """
+        self._regs.append(reg)
         for bit in reg:
             self.add(bit)
 
@@ -173,9 +175,9 @@ class Layout():
         """
         Returns the registers in the layout [QuantumRegister(2, 'qr0'), QuantumRegister(3, 'qr1')]
         Returns:
-            List: A list of Register in the layout
+            Set: A set of Registers in the layout
         """
-        return {bit.register for bit in self.get_virtual_bits()}
+        return set(self._regs)
 
     def get_virtual_bits(self):
         """
