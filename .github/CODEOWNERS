@@ -31,6 +31,7 @@ quantum_info/         @Qiskit/terra-core @ikkoham
 qpy/                  @Qiskit/terra-core
 pulse/                @Qiskit/terra-core @eggerdj  @wshanks
 scheduler/            @Qiskit/terra-core @eggerdj @wshanks
+synthesis/            @Qiskit/terra-core @alexanderivrii @ShellyGarion
 visualization/        @Qiskit/terra-core @nonhermitian
 primitives/           @Qiskit/terra-core @ikkoham @t-imamichi
 # Override the release notes directories to have _no_ code owners, so any review
