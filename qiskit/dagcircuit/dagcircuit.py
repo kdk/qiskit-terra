@@ -551,11 +551,12 @@ class DAGCircuit:
             DAGCircuitError: if a leaf node is connected to multiple outputs
 
         """
-        qargs = qargs or []
-        cargs = cargs or []
+        qargs = qargs or ()
+        cargs = cargs or ()
 
-        all_cbits = self._bits_in_condition(op.condition)
-        all_cbits = set(all_cbits).union(cargs)
+        all_cbits = set(cargs)
+        if op.condition is not None:
+            all_cbits.update(self._bits_in_condition(op.condition))
 
         self._check_condition(op.name, op.condition)
         self._check_bits(qargs, self.output_map)
@@ -569,7 +570,7 @@ class DAGCircuit:
 
         al = [qargs, all_cbits]
         self._multi_graph.insert_node_on_in_edges_multiple(
-            node_index, [self.output_map[q]._node_id for q in itertools.chain(*al)]
+            node_index, tuple(self.output_map[q]._node_id for q in itertools.chain(*al))
         )
         return self._multi_graph[node_index]
 
@@ -1169,7 +1170,8 @@ class DAGCircuit:
 
         condition_bit_list = self._bits_in_condition(node.op.condition)
 
-        new_wires = list(node.qargs) + list(node.cargs) + list(condition_bit_list)
+        # new_wires = list(node.qargs) + list(node.cargs) + list(condition_bit_list)
+        new_wires = tuple(node.qargs) + tuple(node.cargs) + tuple(condition_bit_list)
 
         wire_map = {}
         reverse_wire_map = {}
@@ -1260,8 +1262,11 @@ class DAGCircuit:
             # update node attributes
             old_node = in_dag._multi_graph[old_node_index]
             condition = self._map_condition(wire_map, old_node.op.condition, self.cregs.values())
-            m_qargs = [wire_map.get(x, x) for x in old_node.qargs]
-            m_cargs = [wire_map.get(x, x) for x in old_node.cargs]
+            # m_qargs = [wire_map.get(x, x) for x in old_node.qargs]
+            # m_cargs = [wire_map.get(x, x) for x in old_node.cargs]
+            m_qargs = tuple(wire_map.get(x, x) for x in old_node.qargs)
+            m_cargs = tuple(wire_map.get(x, x) for x in old_node.cargs)
+
             new_node = DAGOpNode(old_node.op, qargs=m_qargs, cargs=m_cargs)
             new_node._node_id = new_node_index
             new_node.op.condition = condition

@@ -18,7 +18,7 @@ from qiskit.circuit.quantumregister import QuantumRegister
 from qiskit.circuit.classicalregister import ClassicalRegister, Clbit
 
 
-def circuit_to_instruction(circuit, parameter_map=None, equivalence_library=None, label=None):
+def circuit_to_instruction(circuit, parameter_map=None, equivalence_library=None, label=None, no_copy=True):
     """Build an :class:`~.circuit.Instruction` object from a :class:`.QuantumCircuit`.
 
     The instruction is anonymous (not tied to a named quantum register),
@@ -60,6 +60,22 @@ def circuit_to_instruction(circuit, parameter_map=None, equivalence_library=None
     """
     # pylint: disable=cyclic-import
     from qiskit.circuit.quantumcircuit import QuantumCircuit
+
+    if parameter_map is None and equivalence_library is None:
+        if len(circuit) == 1:
+            return circuit._data[0][0]
+
+        if no_copy:
+            instruction = Instruction(
+                name=circuit.name,
+                num_qubits=circuit.num_qubits,
+                num_clbits=circuit.num_clbits,
+                params={p: p for p in circuit.parameters},
+                label=label,
+            )
+            instruction.definition = circuit
+            
+            return instruction
 
     if parameter_map is None:
         parameter_dict = {p: p for p in circuit.parameters}

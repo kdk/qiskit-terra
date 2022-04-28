@@ -1201,8 +1201,8 @@ class QuantumCircuit:
             if is_parameter:
                 instruction = copy.deepcopy(instruction)
 
-        expanded_qargs = [self.qbit_argument_conversion(qarg) for qarg in qargs or []]
-        expanded_cargs = [self.cbit_argument_conversion(carg) for carg in cargs or []]
+        expanded_qargs = tuple(self.qbit_argument_conversion(qarg) for qarg in qargs or [])
+        expanded_cargs = tuple(self.cbit_argument_conversion(carg) for carg in cargs or [])
 
         if self._control_flow_scopes:
             appender = self._control_flow_scopes[-1].append
@@ -2666,7 +2666,7 @@ class QuantumCircuit:
             else:
                 qubits.append(qarg)
 
-        return self.append(Barrier(len(qubits)), qubits, [])
+        return self.append(Barrier(len(qubits)), qubits, ())
 
     def delay(
         self,

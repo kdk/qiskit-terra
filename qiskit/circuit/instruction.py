@@ -54,7 +54,7 @@ class Instruction:
     # NOTE: Using this attribute may change in the future (See issue # 5811)
     _directive = False
 
-    def __init__(self, name, num_qubits, num_clbits, params, duration=None, unit="dt", label=None):
+    def __init__(self, name, num_qubits, num_clbits, params=None, duration=None, unit="dt", label=None):
         """Create a new instruction.
 
         Args:
@@ -81,7 +81,6 @@ class Instruction:
         self._num_qubits = num_qubits
         self._num_clbits = num_clbits
 
-        self._params = []  # a list of gate params stored
         # Custom instruction label
         # NOTE: The conditional statement checking if the `_label` attribute is
         #       already set is a temporary work around that can be removed after
@@ -207,16 +206,22 @@ class Instruction:
     @property
     def params(self):
         """return instruction params."""
-        return self._params
+        return list(self._params)
 
     @params.setter
     def params(self, parameters):
-        self._params = []
-        for single_param in parameters:
-            if isinstance(single_param, ParameterExpression):
-                self._params.append(single_param)
-            else:
-                self._params.append(self.validate_parameter(single_param))
+        # self._params = []
+        # for single_param in parameters:
+        #     if isinstance(single_param, ParameterExpression):
+        #         self._params.append(single_param)
+        #     else:
+        #         self._params.append(self.validate_parameter(single_param))
+        if parameters is not None:
+            self._params = tuple(
+                self.validate_parameter(param) if not isinstance(param, ParameterExpression) else param
+                for param in parameters)
+        else:
+            self._params = tuple()
 
     def validate_parameter(self, parameter):
         """Instruction parameters has no validation or normalization."""
@@ -433,7 +438,7 @@ class Instruction:
     def __deepcopy__(self, _memo=None):
         cpy = copy.copy(self)
         cpy._params = copy.copy(self._params)
-        if self._definition:
+        if self._definition and self._define is Instruction._define:
             cpy._definition = copy.deepcopy(self._definition, _memo)
         return cpy
 

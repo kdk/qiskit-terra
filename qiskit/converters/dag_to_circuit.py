@@ -15,7 +15,7 @@
 from qiskit.circuit.quantumcircuit import QuantumCircuit
 
 
-def dag_to_circuit(dag):
+def dag_to_circuit(dag, no_copy=True):
     """Build a ``QuantumCircuit`` object from a ``DAGCircuit``.
 
     Args:
@@ -58,10 +58,20 @@ def dag_to_circuit(dag):
     circuit.metadata = dag.metadata
     circuit.calibrations = dag.calibrations
 
-    for node in dag.topological_op_nodes():
-        # Get arguments for classical control (if any)
-        inst = node.op.copy()
-        circuit._append(inst, node.qargs, node.cargs)
+    circuit._data = [(node.op if no_copy else node.op.copy(),
+                      node.qargs,
+                      node.cargs)
+                     for node in dag.topological_op_nodes()]
+    #for inst, qargs, cargs in circuit._data:
+    #    circuit._update_parameter_table(inst)
+
+    # for node in dag.topological_op_nodes():
+    #     # Get arguments for classical control (if any)
+    #     if no_copy:
+    #         inst = node.op
+    #     else:
+    #         inst = node.op.copy()
+    #     circuit._append(inst, node.qargs, node.cargs)
 
     circuit.duration = dag.duration
     circuit.unit = dag.unit

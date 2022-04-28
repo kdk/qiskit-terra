@@ -123,9 +123,9 @@ class InstructionSet:
             CircuitError: if both ``resource_requester`` and ``circuit_cregs`` are passed.  Only one
                 of these may be passed, and it should be ``resource_requester``.
         """
-        self.instructions = []
-        self.qargs = []
-        self.cargs = []
+        self.instructions = ()
+        self.qargs = ()
+        self.cargs = ()
         if circuit_cregs is not None:
             if resource_requester is not None:
                 raise CircuitError("Cannot pass both 'circuit_cregs' and 'resource_requester'.")
@@ -152,14 +152,19 @@ class InstructionSet:
         """Add an instruction and its context (where it is attached)."""
         if not isinstance(gate, Instruction):
             raise CircuitError("attempt to add non-Instruction" + " to InstructionSet")
-        self.instructions.append(gate)
-        self.qargs.append(qargs)
-        self.cargs.append(cargs)
+        # self.instructions.append(gate)
+        # self.qargs.append(qargs)
+        # self.cargs.append(cargs)
+        self.instructions = self.instructions + (gate,)
+        self.qargs = self.qargs + (qargs,)
+        self.cargs = self.cargs + (cargs,)
 
     def inverse(self):
         """Invert all instructions."""
-        for index, instruction in enumerate(self.instructions):
-            self.instructions[index] = instruction.inverse()
+        # for index, instruction in enumerate(self.instructions):
+        #     self.instructions[index] = instruction.inverse()
+        # KDK Seems... wrong
+        self.instructions = (instruction.inverse() for instruction in self.instructions)
         return self
 
     def c_if(self, classical: Union[Clbit, ClassicalRegister, int], val: int) -> "InstructionSet":
