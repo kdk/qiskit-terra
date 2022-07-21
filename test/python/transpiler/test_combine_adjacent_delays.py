@@ -1,10 +1,11 @@
 from qiskit.test import QiskitTestCase
+from qiskit.transpiler import timing_constraints
 
 from qiskit.transpiler.passes.utils.combine_adjacent_delays import CombineAdjacentDelays
 
 from qiskit.transpiler.timing_constraints import TimingConstraints
 from qiskit.transpiler.passes.scheduling import TimeUnitConversion, ConstrainedReschedule, PadDelay
-from qiskit.transpiler import CouplingMap, InstructionDurations, PassManager
+from qiskit.transpiler import CouplingMap, InstructionDurations, PassManager, instruction_durations
 from qiskit.transpiler.passes import ALAPScheduleAnalysis
 
 from qiskit.test.mock import FakeMumbai
@@ -30,6 +31,28 @@ def schedule_alap(c, backend):
     return pm.run(c)
 
 class TestCombineAdjacentDelays(QiskitTestCase):
+    def test_subcomponent_delays(self):
+        backend=FakeMumbai()
+        cmap = CouplingMap([[0, 1], [1, 0], [1, 2], [2, 1], [2, 3], [3, 2]])
+        instruction_durations = InstructionDurations.from_backend(backend)
+        timing_constraints = TimingConstraints()
+        test_qc = QuantumCircuit(4)
+        test_qc.x(range(4))
+        test_qc.delay(1000, range(4))
+        test_qc.cx(1, 2)
+        test_qc.delay(1000, [0, 3])
+        pm = PassManager(
+            [
+                TimeUnitConversion(instruction_durations),
+                ALAPScheduleAnalysis(instruction_durations),
+                ConstrainedReschedule(acquire_alignment=timing_constraints.acquire_alignment,
+                                    pulse_alignment=timing_constraints.pulse_alignment),
+                PadDelay(),
+                CombineAdjacentDelays(cmap)
+            ]
+        )
+        return pm.run(test_qc)
+
     def test_4q_vchain(self):
         N=4
         backend=FakeMumbai()

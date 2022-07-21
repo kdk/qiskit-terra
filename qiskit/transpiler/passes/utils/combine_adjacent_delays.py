@@ -56,9 +56,31 @@ class CombineAdjacentDelays(TransformationPass):
         closed_delays = []  # new_delay_op, start_time, end_time, replacing_delay_nodes
 
         def _open_delay(start_time, replacing_delay_nodes):
+            qubits = [
+                qarg.index for delay_node in replacing_delay_nodes for qarg in delay_node.qargs
+            ]
+            reduced = self.cmap.reduce(qubits)
+            # If the delay is not connected, break it up into its components and open new 
+            # delya for each 
+            if not reduced.is_connected():
+                # If every single component of the mapping contains only one element,
+                # then reduce() returns empty
+                if reduced.size() > 0:
+                    connected_components = reduced.connected_components()
+                    for component in connected_components:
+                        new_replacing_delay_nodes = [
+                            replacing_delay_nodes[idx] for idx in component
+                        ]
+                        __open_delay(start_time, new_replacing_delay_nodes)
+                else:
+                    for node in replacing_delay_nodes:
+                        __open_delay(start_time, [node])
+            else:
+                __open_delay(start_time, replacing_delay_nodes)
+
+        def __open_delay(start_time, replacing_delay_nodes):
             delay_op = Delay(0)
             delay_op.num_qubits = len(replacing_delay_nodes)
-
             open_delays.append((delay_op, start_time, replacing_delay_nodes))
 
         def _expand_delay(start_time, existing_delay, new_replacing_delay_node):
