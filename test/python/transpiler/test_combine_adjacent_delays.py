@@ -48,7 +48,7 @@ class TestCombineAdjacentDelays(QiskitTestCase):
         ax3 = fig.add_subplot(gs[1,:])
 
         test_qc.draw('mpl', idle_wires=False, ax=ax1)
-        timeline_drawer(test_qc, show_idle=False, show_delays=True)
+        # timeline_drawer(test_qc, show_idle=False, show_delays=True)
         g_test_qc = schedule_alap(test_qc, backend, m_j_d_d)
 
         g_test_qc.draw('mpl', fold=-1, idle_wires=False, ax=ax2)

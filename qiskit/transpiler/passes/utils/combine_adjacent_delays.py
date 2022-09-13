@@ -14,6 +14,153 @@ from qiskit.transpiler import TransformationPass, CouplingMap
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class DelayEvent:
+    "Represent the start or ending event for each delay in the input circuit."
+    type: str  # One of 'begin' or 'end'
+    time: int  # Time in the circuit, in dt
+    op_node: DAGOpNode  # The node for the circuit delay
+
+    @property
+    def qargs(self):
+        return set(self.op_node.qargs)
+
+    @staticmethod
+    def sort_key(event):
+        return (
+            event.time,                       # Sort by event time
+            0 if event.type == 'end' else 1,  # With 'end' events before 'begin'
+        )
+
+
+@dataclass
+class AdjacentDelayBlock:
+    "Group of circuit delays which are collectively adjacent in time and on device."
+    events: List[DelayEvent]
+    active_qubits: Set[Qubit]
+
+    def validate(self):
+        for idx, event in enumerate(self.events):
+            if idx < len(self.events)-1:
+                if event.time > self.events[idx+1].time:
+                    raise RuntimeError('adjacent_delay_block.events not ordered by time')
+
+                if event.time == self.events[idx+1].time:
+                    # At same time, can either be ('begin', 'begin'), ('begin', 'end') or ('end', 'end')
+                    if (event.type, self.events[idx+1].type) == ('end', 'begin'):
+                        raise RuntimeError('adjacent_delay_block.events not ordered by event type')
+
+
+@dataclass
+class GroupedDelayEvent:
+    "Grouped event of single type and time, but spanning one or more qubits/Delay instructions."
+    type: str
+    time: int
+    _op_nodes: List[DAGOpNode]
+
+    def __init__(self, type, time, _op_nodes):
+        self.type = type
+        self.time = time
+        self.op_nodes = _op_nodes
+        self._qargs = set(qarg for op_node in self.op_nodes
+                   for qarg in op_node.qargs)
+
+    @property
+    def op_nodes(self):
+        return self._op_nodes
+
+    @op_nodes.setter
+    def op_nodes(self, val):
+        if not val:
+            import pdb; pdb.set_trace()
+        self._op_nodes = val
+
+    @property
+    def qargs(self):
+        #return self._qargs
+        return set(qarg for op_node in self.op_nodes
+                   for qarg in op_node.qargs)
+
+    def __repr__(self):
+        return (
+            f"GroupedDelayEvent({self.type}),\n"
+            f"                  {self.time}),\n"
+            f"                  {[(op.op.duration, [q.index for q in op.qargs]) for op in self.op_nodes]})\n"
+        )
+
+
+@dataclass
+class AdjacentGroupedDelayBlock:
+    "Collection of circuit delay groups which are collectively adjacent in time and on device."
+    events:  List[GroupedDelayEvent]
+
+    def _old_validate(self):
+        for idx, grouped_delay_event in enumerate(self.events):
+            if idx < len(grouped_delay_block.events)-1:
+                if grouped_delay_event.time > self.events[idx+1].time:
+                    raise RuntimeError('grouped_delay_block not ordered by time')
+
+                if grouped_delay_event.time == self.events[idx+1].time:
+                    if (grouped_delay_event.type, self.events[idx+1].type) != ('begin', 'end'):
+                        raise RuntimeError('grouped_delay_block not ordered by event type')
+
+
+    def validate(self):
+        # events in order start end, type
+        last_time=-1
+        last_type = None
+        for grouped_delay_event in self.events:
+            if grouped_delay_event.time > last_time:
+                last_time = grouped_delay_event.time
+                continue
+
+            if grouped_delay_event.time < last_time:
+                raise RuntimeError('out of time order')
+
+            if (last_type, grouped_delay_event.type) != ('end', 'begin'):
+                raise RuntimeError('out of type order')
+
+        # every qubit has matching start/end pairs
+        all_qubits_event_types = defaultdict(list)
+        for event in self.events:
+            for qarg in event.qargs:
+                all_qubits_event_types[qarg].append(event.type)
+
+        for qubit, qubit_event_types in all_qubits_event_types.items():
+            if len(qubit_event_types) % 2 != 0:
+                import pdb; pdb.set_trace()
+                raise RuntimeError('odd number of qubit events')
+
+            if qubit_event_types != ['begin', 'end'] * int(len(qubit_event_types)/2):
+                import pdb; pdb.set_trace()
+                raise RuntimeError('qubit events dont strictly follow open/close/open/close/...')
+
+        return self
+
+
+@dataclass
+class CollectedJointDelay:
+    "Collection of Delay ops from input circuit to be output as a joint delay."
+    num_qubits: int
+    begin_delay_event: GroupedDelayEvent
+    end_delay_event: GroupedDelayEvent
+    open_op_nodes: List[DAGOpNode]  # N.B. These op_nodes in general will extend beyond {begin,end}_delay_event.
+
+    def __iter__(self):
+        return iter((self.num_qubits,
+                     self.begin_delay_event,
+                     self.end_delay_event,
+                     self.open_op_nodes))
+
+
+@dataclass
+class ReplacementDelay:
+    new_delay_op: Delay
+    start_time: int
+    end_time: int
+    replacing_delay_nodes: List[DAGOpNode]  # List of DelayOpNodes on the original DAG which overlap with this new delay.
+
+
 class CombineAdjacentDelays(TransformationPass):
     def __init__(self, cmap, min_joinable_delay_duration=None):
         self.cmap = cmap
@@ -25,27 +172,8 @@ class CombineAdjacentDelays(TransformationPass):
     def run(self, dag):
         bit_idx_locs = {bit: idx for idx, bit in enumerate(dag.qubits)}
 
-        @dataclass
-        class DelayEvent:
-            "Represent the start or ending event for each delay in the input circuit."
-            type: str  # One of 'begin' or 'end'
-            time: int  # Time in the circuit, in dt
-            op_node: DAGOpNode  # The node for the circuit delay
-
-            @property
-            def qargs(self):
-                return set(self.op_node.qargs)
-
-            @staticmethod
-            def sort_key(event):
-                return (
-                    event.time,                       # Sort by event time
-                    0 if event.type == 'end' else 1,  # With 'end' events before 'begin'
-                )
-            
         # Find and sort every leading/trailing edge of a delay in the circuit.
         # These will be the places we'll examine to split/combine delay ops.
-
         sorted_delay_events = sorted(
             (
                 DelayEvent(
@@ -65,247 +193,33 @@ class CombineAdjacentDelays(TransformationPass):
             key=DelayEvent.sort_key
         )
 
-        logger.debug(f'sorted_delay_events: {pformat(sorted_delay_events)}')
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'sorted_delay_events: {pformat(sorted_delay_events)}')
 
         # Collect grouped delays by concurrency in time and adjacency on device.
-
-        @dataclass
-        class AdjacentDelayBlock:
-            "Group of circuit delays which are collectively adjacent in time and on device."
-            events: List[DelayEvent]
-            active_qubits: Set[Qubit]
-
-        open_delay_blocks = []
-        closed_delay_blocks = []
-
-        def _open_delay_block(delay_event):
-            open_delay_blocks.append(
-                AdjacentDelayBlock(events=[delay_event],
-                                   active_qubits=set(delay_event.qargs)))
-            return open_delay_blocks[-1]
-
-        def _update_delay_block(open_delay_block, delay_event):
-            "Add another delay event to an existing block to either extend or close it."
-            open_delay_block.events.append(delay_event)
-
-            if delay_event.type == 'begin':
-                open_delay_block.active_qubits += set(delay_event.qargs)
-            elif delay_event.type == 'end':
-                open_delay_block.active_qubits -= set(delay_event.qargs)
-            else:
-                raise RuntimeError('bad event type')
-
-            if not open_delay_block.active_qubits:
-                open_delay_blocks.remove(open_delay_block)
-                closed_delay_blocks.append(open_delay_block)
-
-        def _combine_delay_blocks(delay_blocks):
-            survivor, *doomed = delay_blocks
-
-            for doomed_delay_group in doomed:
-                # Add events and qubits from doomed block to survivor.
-                if survivor.active_qubits.intersection(doomed_delay_group.active_qubits):
-                    raise RuntimeError('More than one open delay on a qubit?')
-
-                survivor.events.extend(doomed_delay_group.events)
-                survivor.active_qubits.update(doomed_delay_group.active_qubits)
-
-                open_delay_blocks.remove(doomed_delay_group)
-                survivor.events.sort(key=DelayEvent.sort_key)  # Maintain sorted event order
-
-        for delay_event in sorted_delay_events:
-            # This could be avoided by keeping a map of device qubit to open
-            # block and only considering neighbors of current event.
-            adjacent_open_delay_blocks = [open_delay for open_delay in open_delay_blocks
-                                    if any(
-                                            self.cmap.distance(
-                                                bit_idx_locs[delay_event.op_node.qargs[0]],
-                                                bit_idx_locs[open_delay_qubit]) <= 1
-                                            for open_delay_qubit in open_delay.active_qubits)]
-
-            if delay_event.type == 'begin':
-                # If crossing a begin edge, check if there are any open delays that are adjacent.
-                # If so, add current event to that group.
-            
-                if len(adjacent_open_delay_blocks) == 0:
-                    # Make a new delay
-                    _open_delay_block(delay_event)
-                else:
-                    # Make a new block and combine that with adjacent open blocks
-                    new_block = _open_delay_block(delay_event)
-                    _combine_delay_blocks(adjacent_open_delay_blocks + [new_block])
-
-            if delay_event.type == 'end':
-                # If crossing a end edge, remove this qubit from the actively delaying qubits"
-                if len(adjacent_open_delay_blocks) != 1:
-                    import pdb; pdb.set_trace()
-                    raise Exception("closing edge w/o an open delay?")
-                else:
-                    _update_delay_block(adjacent_open_delay_blocks[0], delay_event)
-
-            logger.debug(pformat((
-                '---exit---',
-                delay_event,
-                ('open_delays: ', open_delay_blocks),
-                ('closed_delays: ', closed_delay_blocks),
-            )))
-
-        logger.debug(pformat((
-            '---post_collect---',
-            ('open_delays: ', open_delay_blocks),
-            ('len(closed_delays): ', len(closed_delay_blocks)),
-        )))
-
-        if open_delay_blocks:
-            raise RuntimeError('Failed to close all open delays.')
-        for closed_delay in closed_delay_blocks:
-            if closed_delay.active_qubits:
-                raise RuntimeError('Failed remove active qubits on closed delays.')
-
-        adjacent_delay_blocks = closed_delay_blocks
+        adjacent_delay_blocks = _collect_adjacent_delay_blocks(sorted_delay_events, self.cmap, bit_idx_locs)
 
         # Assume we've kept the time/event ordering from above.
-        # Rely on this in block below.
-        # So verify.
+        # Rely on this in block below, so validate.
         for adjacent_delay_block in adjacent_delay_blocks:
-            for idx, event in enumerate(adjacent_delay_block.events):
-                if idx < len(adjacent_delay_block.events)-1:
-                    if event.time > adjacent_delay_block.events[idx+1].time:
-                        raise RuntimeError('adjacent_delay_block.events not ordered by time')
-
-                    if event.time == adjacent_delay_block.events[idx+1].time:
-                        # At same time, can either be ('begin', 'begin'), ('begin', 'end') or ('end', 'end')
-                        if (event.type, adjacent_delay_block.events[idx+1].type) == ('end', 'begin'):
-                            raise RuntimeError('adjacent_delay_block.events not ordered by event type')
-
+            adjacent_delay_block.validate()
 
         # Within each adjacent delay block, collect events by time, type.
         # This will faciltate knowing where to split them into joint N-qubit delays.
+        grouped_delay_blocks = _group_delay_blocks(adjacent_delay_blocks)
 
-        @dataclass
-        class GroupedDelayEvent:
-            "Grouped event of single type and time, but spanning one or more qubits/Delay instructions."
-            type: str
-            time: int
-            _op_nodes: List[DAGOpNode]
-
-            def __init__(self, type, time, _op_nodes):
-                self.type = type
-                self.time = time
-                self.op_nodes = _op_nodes
-
-            @property
-            def op_nodes(self):
-                return self._op_nodes
-
-            @op_nodes.setter
-            def op_nodes(self, val):
-                if not val:
-                    import pdb; pdb.set_trace()
-                self._op_nodes = val
-
-            @property
-            def qargs(self):
-                return set(qarg for op_node in self.op_nodes
-                           for qargs in op_node.qargs)
-
-        @dataclass
-        class AdjacentGroupedDelayBlock:
-            "Collection of circuit delay groups which are collectively adjacent in time and on device."
-            events:  List[GroupedDelayEvent]
-
-            def validate(self):
-                # events in order start end, type
-                last_time=-1
-                last_type = None
-                for grouped_delay_event in self.events:
-                    if grouped_delay_event.time > last_time:
-                        last_time = grouped_delay_event.time
-                        continue
-
-                    if grouped_delay_event.time < last_time:
-                        raise RuntimeError('out of time order')
-
-                    if (last_type, grouped_delay_event.type) != ('end', 'begin'):
-                        raise RuntimeError('out of type order')
-
-                # every qubit has matching start/end pairs
-                all_qubits = set(qarg for event in self.events for qarg in event.qargs)
-
-                for qubit in all_qubits:
-                    qubit_event_types = [event.type for event in self.events if qubit in event.qargs]
-
-                    if len(qubit_event_types) % 2 != 0:
-                        raise RuntimeError('odd number of qubit events')
-
-                    if qubit_event_types != ['begin', 'end'] * len(qubit_event_types)/2:
-                        raise RuntimeError('qubit events dont strictly follow open/close/open/close/...')
-
-                return self
-
-        grouped_delay_blocks = []
-
-        for adjacent_delay_block in adjacent_delay_blocks:
-            grouped_delay_block = AdjacentGroupedDelayBlock([])
-
-            for delay_event in adjacent_delay_block.events:
-                # If we're on the first edge, it gets a pass.
-                if not grouped_delay_block.events:
-                    grouped_delay_block.events.append(
-                        GroupedDelayEvent(delay_event.type,
-                                          delay_event.time,
-                                          [delay_event.op_node]))
-                    continue
-
-                # Look at last known grouped event.
-                # KDK do we need to check adjacency here?
-                # i.e. even though we're in a block, not all event groups will be adjacent
-                # KDK Maybe dump this grouping, it seems to make life hard and doesn't solve any problems (because we'll still need to check adjacency down the road.
-                newest_grouped_delay = grouped_delay_block.events[-1]
-
-                # If newest grouped event is earlier than current, need a new group.
-                if delay_event.time > newest_grouped_delay.time:
-                    grouped_delay_block.events.append(
-                        GroupedDelayEvent(delay_event.type,
-                                          delay_event.time,
-                                          [delay_event.op_node]))
-                    continue
-
-                # If newest grouped event is _later_ than current, question our worldview.
-                if delay_event.time < newest_grouped_delay.time:
-                    raise RuntimeError('Did not find a matching event group.')
-
-                # If newest grouped has same time and type, add current event to that group.
-                if delay_event.type == newest_grouped_delay.type:
-                    newest_grouped_delay.op_nodes.append(delay_event.op_node)
-                    continue
-
-                #If we've passed all the above, have same time but different type, so add a new group.
-                grouped_delay_block.events.append(
-                    GroupedDelayEvent(delay_event.type,
-                                      delay_event.time,
-                                      [delay_event.op_node]))
-
-            grouped_delay_blocks.append(grouped_delay_block)
-
-        logger.debug(pformat((
-            '---post_group_by_time/event---',
-            ('grouped_delays_blocks: ', grouped_delay_blocks),
-            ('len(grouped_delay_blocks): ', len(grouped_delay_blocks)),
-        )))
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(pformat((
+                '---post_group_by_time/event---',
+                ('grouped_delays_blocks: ', grouped_delay_blocks),
+                ('len(grouped_delay_blocks): ', len(grouped_delay_blocks)),
+            )))
 
         # Assume we've kept the time/event ordering from above.
         # Rely on this in block below.
         # So verify.
         for grouped_delay_block in grouped_delay_blocks:
-            for idx, grouped_delay_event in enumerate(grouped_delay_block.events):
-                if idx < len(grouped_delay_block.events)-1:
-                    if grouped_delay_event.time > grouped_delay_block.events[idx+1].time:
-                        raise RuntimeError('grouped_delay_block not ordered by time')
-
-                    if grouped_delay_event.time == grouped_delay_block.events[idx+1].time:
-                        if (grouped_delay_event.type, grouped_delay_block.events[idx+1].type) != ('begin', 'end'):
-                            raise RuntimeError('grouped_delay_block not ordered by event type')
+            grouped_delay_block.validate()
 
         logger.info('Begin finding and isolating widest delays within groups.')
 
@@ -315,237 +229,14 @@ class CombineAdjacentDelays(TransformationPass):
         # Split remainder of original delay block into two new delay blocks and add those onto queue to be
         # further split if possible.
 
-        @dataclass
-        class CollectedJointDelay:
-            "Collection of Delay ops from input circuit to be output as a joint delay."
-            num_qubits: int
-            begin_delay_event: GroupedDelayEvent
-            end_delay_event: GroupedDelayEvent
-            open_op_nodes: List[DAGOpNode]  # N.B. These op_nodes in general will extend beyond {begin,end}_delay_event.
+        collected_joint_delays = _subdivide_grouped_delays(grouped_delay_blocks, self._min_joinable_delay_duration, self._cmap, bit_idx_locs)
 
-            def __iter__(self):
-                return iter((self.num_qubits,
-                             self.begin_delay_event,
-                             self.end_delay_event,
-                             self.open_op_nodes))
-
-        closed_joint_delays = []
-
-        while grouped_delay_blocks:
-            grouped_delay = grouped_delay_blocks.pop(0)
-
-            logger.debug(f'Examining grouped_delay: {pformat(grouped_delay)}')
-
-            # Find widest point, incr on open, decr on close
-
-            current_open_qubits = set()
-            current_open_op_nodes = []
-
-            widest = CollectedJointDelay(
-                num_qubits = len(current_open_qubits),
-                begin_delay_event = None,
-                end_delay_event = None,
-                open_op_nodes = current_open_op_nodes.copy())
-
-            for grouped_delay_event in grouped_delay.events:
-                logger.debug(f'Considering event: {pformat(grouped_delay_event)} '
-                             f'with widest at entry: {widest}')
-
-                event_qubits = set(qarg for op_node in grouped_delay_event.op_nodes
-                                   for qarg in op_node.qargs)
-
-                if grouped_delay_event.type == 'begin':
-                    if not current_open_qubits.isdisjoint(event_qubits):
-                        raise RuntimeError('re-opening open qubits?')
-
-                    current_open_qubits.update(event_qubits)
-                    current_open_op_nodes.extend(grouped_delay_event.op_nodes)
-
-                    if len(current_open_qubits) > widest.num_qubits:
-                        widest = CollectedJointDelay(
-                            num_qubits = len(current_open_qubits),
-                            begin_delay_event = grouped_delay_event,
-                            end_delay_event = None,
-                            open_op_nodes = current_open_op_nodes.copy())
-
-                elif grouped_delay_event.type == 'end':
-                    if not event_qubits.issubset(current_open_qubits):
-                        import pdb; pdb.set_trace()
-                        raise RuntimeError('closing qubits that arent open')
-
-                    if widest.end_delay_event is None:
-                        widest.end_delay_event = grouped_delay_event
-
-                    current_open_qubits -= event_qubits
-                    for op_node in grouped_delay_event.op_nodes:
-                        current_open_op_nodes.remove(op_node)
-                else:
-                    raise RuntimeError('bad event type?')
-
-            logger.debug(f'Found widest interval: {widest}')
-
-            new_delay_width, new_delay_begin, new_delay_end, replacing_op_nodes = widest
-
-            if new_delay_width == 1:
-                logger.debug('Widest segment has width 1. Adding to closed delays.')
-                closed_joint_delays.append(widest)
-
-                if len(grouped_delay.events) > 2:
-                    raise RuntimeError('widest[0] == 1 but more than one open/close pair')
-            elif new_delay_end is None:
-                import pdb; pdb.set_trace()
-                raise RuntimeError(f'widest was never closed?: {widest}')
-            else:
-                new_delay_duration = new_delay_end.time - new_delay_begin.time
-
-                if new_delay_duration >= self._min_joinable_delay_duration:
-                    closed_joint_delays.append(widest)
-
-                    split_left_idx = grouped_delay.events.index(new_delay_begin)
-                    split_right_idx = grouped_delay.events.index(new_delay_end)
-
-                    logger.debug('Widest exceeds self._min_joinable_delay_duration, '
-                                 'splitting group_delay_events at index '
-                                 f'{split_left_idx} and {split_right_idx}.')
-
-                    if split_right_idx != split_left_idx + 1:
-                        raise RuntimeError('widest begin and end non-adjacent')
-
-                    new_left_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx])
-                    new_right_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:])
-
-                    if split_left_idx > 0:
-                        new_left_delay_group.events.append(
-                            GroupedDelayEvent(type='end',
-                                              time=new_delay_begin.time,
-                                              _op_nodes = [op_node for op_node in replacing_op_nodes
-                                                          if op_node not in new_delay_begin.op_nodes]))
-                        logger.debug('Creating group from left-of widest: '
-                                     f'{pformat(new_left_delay_group)}')
-                        if not new_left_delay_group:
-                            import pdb; pdb.set_trace()
-                        grouped_delay_blocks.append(new_left_delay_group)
-
-                    if split_right_idx < len(grouped_delay.events) - 1:
-
-                        new_right_delay_group.events.insert(0,
-                            GroupedDelayEvent(type='begin',
-                                              time=new_delay_end.time,
-                                              _op_nodes=[op_node for op_node in replacing_op_nodes
-                                                        if op_node not in new_delay_end.op_nodes]))
-                        logger.debug('Creating group from right-of widest: '
-                                     f'{pformat(new_right_delay_group)}')
-
-                        if not new_right_delay_group:
-                            import pdb; pdb.set_trace()
-                        grouped_delay_blocks.append(new_right_delay_group)
-                    
-                else:
-                    # If new_delay_duration is shorter than self._min_joinable_delay_duration,
-                    # attempt to split current group into two grouped delays which will
-                    # admit the widest possible delay when they are each processed.
-
-                    split_left_idx = grouped_delay.events.index(new_delay_begin)
-                    split_right_idx = grouped_delay.events.index(new_delay_end)
-
-                    logger.debug(f'Widest segment duration {new_delay_duration} '
-                                 f'shorter than self._min_joinable_delay_duration {self._min_joinable_delay_duration}.'
-                                 'Splitting group_delay_events at index '
-                                 f'{split_left_idx} and {split_right_idx}.')
-
-                    if split_right_idx != split_left_idx + 1:
-                        raise RuntimeError('widest begin and end non-adjacent')
-
-                    opening_event_qubits = set(qarg for op_node in new_delay_begin.op_nodes
-                                               for qarg in op_node.qargs)
-                    closing_event_qubits = set(qarg for op_node in new_delay_end.op_nodes
-                                               for qarg in op_node.qargs)
-                    # If there are qubits which both opened and closed this delay group,
-                    # they must have a delay < self._min_joinable_delay_duration, so pull them out of
-                    # this group and give them all 1q Delays.
-
-                    narrow_single_delay_qubits = opening_event_qubits.intersection(closing_event_qubits)
-
-                    for single_delay_qubit in narrow_single_delay_qubits:
-                        narrow_single_delay_op_nodes = [op_node for op_node in replacing_op_nodes
-                                                        if single_delay_qubit in op_node.qargs]
-
-                        single_delay_begin = GroupedDelayEvent(
-                            type='begin',
-                            time = new_delay_begin.time,
-                            _op_nodes = narrow_single_delay_op_nodes)
-
-                        single_delay_end = GroupedDelayEvent(
-                            type='end',
-                            time = new_delay_end.time,
-                            _op_nodes = narrow_single_delay_op_nodes)
-                    
-                        narrow_single_delay = CollectedJointDelay(
-                            num_qubits = 1,
-                            begin_delay_event = single_delay_begin,
-                            end_delay_event = single_delay_end,
-                            open_op_nodes = narrow_single_delay_op_nodes)
-
-                        logger.debug('Adding single-qubit delays on splintered qubit. '
-                                     f'{pformat(narrow_single_delay)}')
-
-                        closed_joint_delays.append(narrow_single_delay)
-
-                    # If there were qubits in new_delay_begin/new_delay_end that didn't get cut out into singles
-                    # retain their begin/end events
-                    residual_begin_qubits = opening_event_qubits - narrow_single_delay_qubits
-                    residual_end_qubits = closing_event_qubits - narrow_single_delay_qubits
-
-                    new_left_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx])
-                    new_right_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:])
-
-                    if residual_end_qubits:
-                        if split_left_idx == 0:
-                            raise RuntimeError('')
-
-                        new_left_delay_group.events.append(
-                            GroupedDelayEvent(type='end',
-                                              time=new_delay_end.time,
-                                              _op_nodes=[op_node for op_node in replacing_op_nodes
-                                                         if residual_end_qubits.intersection(op_node.qargs)]))
-
-                    if residual_begin_qubits:
-                        if split_right_idx == len(grouped_delay.events):
-                            raise RuntimeError('')
-
-                        new_right_delay_group.events.insert(
-                            0,
-                            GroupedDelayEvent(type='begin',
-                                              time=new_delay_begin.time,
-                                              _op_nodes=[op_node for op_node in replacing_op_nodes
-                                                         if residual_begin_qubits.intersection(op_node.qargs)]))
-
-                    if new_left_delay_group.events:
-                        logger.debug('Creating group from left-of widest: '
-                                    f'{pformat(new_left_delay_group)}')
-
-                        grouped_delay_blocks.append(new_left_delay_group)
-
-                    if new_right_delay_group.events:
-                        logger.debug('Creating group from right-of widest: '
-                                    f'{pformat(new_right_delay_group)}')
-
-                        grouped_delay_blocks.append(new_right_delay_group)
-
-        collected_joint_delays = closed_joint_delays
-
-        logger.debug(pformat((
-            'collected_joint_delays',
-            collected_joint_delays)))
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(pformat((
+                'collected_joint_delays',
+                collected_joint_delays)))
 
         # Create new N-Qubit delay ops for joint delays.
-
-        @dataclass
-        class ReplacementDelay:
-            new_delay_op: Delay
-            start_time: int
-            end_time: int
-            replacing_delay_nodes: List[DAGOpNode]  # List of DelayOpNodes on the original DAG which overlap with this new delay.
 
         replacement_delays = []
         for widest in collected_joint_delays:
@@ -606,3 +297,356 @@ class CombineAdjacentDelays(TransformationPass):
                 raise RuntimerError('')
 
         return dag
+
+def _collect_adjacent_delay_blocks(sorted_delay_events, cmap, bit_idx_locs):
+    open_delay_blocks = []
+    closed_delay_blocks = []
+
+    def _open_delay_block(delay_event):
+        open_delay_blocks.append(
+            AdjacentDelayBlock(events=[delay_event],
+                               active_qubits=set(delay_event.qargs)))
+        return open_delay_blocks[-1]
+
+    def _update_delay_block(open_delay_block, delay_event):
+        "Add another delay event to an existing block to either extend or close it."
+        open_delay_block.events.append(delay_event)
+
+        if delay_event.type == 'begin':
+            open_delay_block.active_qubits += set(delay_event.qargs)
+        elif delay_event.type == 'end':
+            open_delay_block.active_qubits -= set(delay_event.qargs)
+        else:
+            raise RuntimeError('bad event type')
+
+        if not open_delay_block.active_qubits:
+            open_delay_blocks.remove(open_delay_block)
+            closed_delay_blocks.append(open_delay_block)
+
+    def _combine_delay_blocks(delay_blocks):
+        survivor, *doomed = delay_blocks
+
+        for doomed_delay_group in doomed:
+            # Add events and qubits from doomed block to survivor.
+            if survivor.active_qubits.intersection(doomed_delay_group.active_qubits):
+                raise RuntimeError('More than one open delay on a qubit?')
+
+            survivor.events.extend(doomed_delay_group.events)
+            survivor.active_qubits.update(doomed_delay_group.active_qubits)
+
+            open_delay_blocks.remove(doomed_delay_group)
+            survivor.events.sort(key=DelayEvent.sort_key)  # Maintain sorted event order
+
+    for delay_event in sorted_delay_events:
+        # This could be avoided by keeping a map of device qubit to open
+        # block and only considering neighbors of current event.
+        adjacent_open_delay_blocks = [open_delay for open_delay in open_delay_blocks
+                                if any(
+                                        cmap.distance(
+                                            bit_idx_locs[delay_event.op_node.qargs[0]],
+                                            bit_idx_locs[open_delay_qubit]) <= 1
+                                        for open_delay_qubit in open_delay.active_qubits)]
+
+        if delay_event.type == 'begin':
+            # If crossing a begin edge, check if there are any open delays that are adjacent.
+            # If so, add current event to that group.
+
+            if len(adjacent_open_delay_blocks) == 0:
+                # Make a new delay
+                _open_delay_block(delay_event)
+            else:
+                # Make a new block and combine that with adjacent open blocks
+                new_block = _open_delay_block(delay_event)
+                _combine_delay_blocks(adjacent_open_delay_blocks + [new_block])
+
+        if delay_event.type == 'end':
+            # If crossing a end edge, remove this qubit from the actively delaying qubits"
+            if len(adjacent_open_delay_blocks) != 1:
+                import pdb; pdb.set_trace()
+                raise Exception("closing edge w/o an open delay?")
+            else:
+                _update_delay_block(adjacent_open_delay_blocks[0], delay_event)
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(pformat((
+                '---exit---',
+                delay_event,
+                ('open_delays: ', open_delay_blocks),
+                ('closed_delays: ', closed_delay_blocks),
+            )))
+
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(pformat((
+            '---post_collect---',
+            ('open_delays: ', open_delay_blocks),
+            ('len(closed_delays): ', len(closed_delay_blocks)),
+        )))
+
+    if open_delay_blocks:
+        raise RuntimeError('Failed to close all open delays.')
+    for closed_delay in closed_delay_blocks:
+        if closed_delay.active_qubits:
+            raise RuntimeError('Failed remove active qubits on closed delays.')
+
+    return closed_delay_blocks
+
+def _group_delay_blocks(adjacent_delay_blocks):
+    grouped_delay_blocks = []
+
+    for adjacent_delay_block in adjacent_delay_blocks:
+        grouped_delay_block = AdjacentGroupedDelayBlock([]).validate()
+
+        for delay_event in adjacent_delay_block.events:
+            # If we're on the first edge, it gets a pass.
+            if not grouped_delay_block.events:
+                grouped_delay_block.events.append(
+                    GroupedDelayEvent(delay_event.type,
+                                      delay_event.time,
+                                      [delay_event.op_node]))
+                continue
+
+            # Look at last known grouped event.
+            # KDK do we need to check adjacency here?
+            # i.e. even though we're in a block, not all event groups will be adjacent
+            # KDK Maybe dump this grouping, it seems to make life hard and doesn't solve any problems (because we'll still need to check adjacency down the road.
+            newest_grouped_delay = grouped_delay_block.events[-1]
+
+            # If newest grouped event is earlier than current, need a new group.
+            if delay_event.time > newest_grouped_delay.time:
+                grouped_delay_block.events.append(
+                    GroupedDelayEvent(delay_event.type,
+                                      delay_event.time,
+                                      [delay_event.op_node]))
+
+                continue
+
+            # If newest grouped event is _later_ than current, question our worldview.
+            if delay_event.time < newest_grouped_delay.time:
+                raise RuntimeError('Did not find a matching event group.')
+
+            # If newest grouped has same time and type, add current event to that group.
+            if delay_event.type == newest_grouped_delay.type:
+                newest_grouped_delay.op_nodes.append(delay_event.op_node)
+                continue
+
+            #If we've passed all the above, have same time but different type, so add a new group.
+            grouped_delay_block.events.append(
+                GroupedDelayEvent(delay_event.type,
+                                  delay_event.time,
+                                  [delay_event.op_node]))
+
+        grouped_delay_blocks.append(grouped_delay_block.validate())
+
+    return grouped_delay_blocks
+
+def _subdivide_grouped_delays(grouped_delay_blocks,
+                              min_joinable_delay_duration,
+                              cmap,
+                              bit_idx_locs):
+    closed_joint_delays = []
+
+    while grouped_delay_blocks:
+        logger.info(f'In _subdivide_grouped_delays loop: {len(closed_joint_delays)} done, '
+                    f'{len(grouped_delay_blocks)} remain.')
+        grouped_delay = grouped_delay_blocks.pop(0)
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'Examining grouped_delay: {pformat(grouped_delay)}')
+
+        widest = _find_widest_collected_joint_delay(grouped_delay, cmap, bit_idx_locs)
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'Found widest interval: {widest}')
+
+        new_delay_width, new_delay_begin, new_delay_end, replacing_op_nodes = widest
+
+        if new_delay_width == 1:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug('Widest segment has width 1. Adding to closed delays.')
+            closed_joint_delays.append(widest)
+
+            if len(grouped_delay.events) > 2:
+                raise RuntimeError('widest[0] == 1 but more than one open/close pair')
+        elif new_delay_end is None:
+            import pdb; pdb.set_trace()
+            raise RuntimeError(f'widest was never closed?: {widest}')
+        else:
+            new_delay_duration = new_delay_end.time - new_delay_begin.time
+
+            split_left_idx = grouped_delay.events.index(new_delay_begin)
+            split_right_idx = grouped_delay.events.index(new_delay_end)
+
+            if split_right_idx != split_left_idx + 1:
+                raise RuntimeError('widest begin and end non-adjacent')
+
+            if new_delay_duration >= min_joinable_delay_duration:
+                closed_joint_delays.append(widest)
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug('Widest exceeds min_joinable_delay_duration, '
+                                 'splitting group_delay_events at index '
+                                 f'{split_left_idx} and {split_right_idx}.')
+
+                # N.B. These won't be valid until after they have the following events added.
+                new_left_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx])
+                new_right_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:])
+
+                if split_left_idx > 0:
+
+                    new_left_delay_group.events.append(
+                        GroupedDelayEvent(type='end',
+                                          time=new_delay_begin.time,
+                                          _op_nodes = [op_node for op_node in replacing_op_nodes
+                                                      if op_node not in new_delay_begin.op_nodes]))
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug('Creating group from left-of widest: '
+                                     f'{pformat(new_left_delay_group)}')
+                    if not new_left_delay_group:
+                        import pdb; pdb.set_trace()
+                    grouped_delay_blocks.append(new_left_delay_group.validate())
+
+                if split_right_idx < len(grouped_delay.events) - 1:
+
+                    new_right_delay_group.events.insert(0,
+                        GroupedDelayEvent(type='begin',
+                                          time=new_delay_end.time,
+                                          _op_nodes=[op_node for op_node in replacing_op_nodes
+                                                    if op_node not in new_delay_end.op_nodes]))
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug('Creating group from right-of widest: '
+                                     f'{pformat(new_right_delay_group)}')
+
+                    if not new_right_delay_group:
+                        import pdb; pdb.set_trace()
+                    grouped_delay_blocks.append(new_right_delay_group.validate())
+
+            else:
+                # If new_delay_duration is shorter than min_joinable_delay_duration,
+                # attempt to split current group into two grouped delays which will
+                # admit the widest possible delay when they are each processed.
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    logger.debug(f'Widest segment duration {new_delay_duration} '
+                                 f'shorter than min_joinable_delay_duration {min_joinable_delay_duration}.'
+                                 'Splitting group_delay_events at index '
+                                 f'{split_left_idx} and {split_right_idx}.')
+
+                # If there are qubits which both opened and closed this delay group,
+                # they will have a delay < min_joinable_delay_duration, so pull them out of
+                # this group and give them all 1q Delays.
+
+                narrow_single_delay_qubits = new_delay_begin.qargs.intersection(new_delay_end.qargs)
+
+                for single_delay_qubit in narrow_single_delay_qubits:
+                    narrow_single_delay_op_nodes = [op_node for op_node in replacing_op_nodes
+                                                    if single_delay_qubit in op_node.qargs]
+
+                    single_delay_begin = GroupedDelayEvent(
+                        type='begin',
+                        time = new_delay_begin.time,
+                        _op_nodes = narrow_single_delay_op_nodes)
+
+                    single_delay_end = GroupedDelayEvent(
+                        type='end',
+                        time = new_delay_end.time,
+                        _op_nodes = narrow_single_delay_op_nodes)
+
+                    narrow_single_delay = CollectedJointDelay(
+                        num_qubits = 1,
+                        begin_delay_event = single_delay_begin,
+                        end_delay_event = single_delay_end,
+                        open_op_nodes = narrow_single_delay_op_nodes)
+
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug('Adding single-qubit delays on splintered qubit. '
+                                     f'{pformat(narrow_single_delay)}')
+
+                    closed_joint_delays.append(narrow_single_delay)
+
+                # If there were qubits in new_delay_begin/new_delay_end that didn't get cut out into singles
+                # retain their begin/end events, but otherwise retain as one group.
+                residual_begin_qubits = new_delay_begin.qargs - narrow_single_delay_qubits
+                residual_end_qubits = new_delay_end.qargs - narrow_single_delay_qubits
+
+                # new_left_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx])
+                # new_right_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:])
+
+                if residual_end_qubits:
+                    residual_end_event = GroupedDelayEvent(
+                        type='end',
+                        time=new_delay_end.time,
+                        _op_nodes=[op_node for op_node in replacing_op_nodes
+                                   if residual_end_qubits.intersection(op_node.qargs)])
+
+                    grouped_delay.events[split_left_idx] = residual_end_event
+
+                    if not residual_end_event.op_nodes:
+                        grouped_delay_blocks.append(AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx]).validate())
+                    else:
+                        grouped_delay_blocks.append(AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx+1]).validate())
+
+                if residual_begin_qubits:
+                    residual_begin_event = GroupedDelayEvent(
+                        type='begin',
+                        time=new_delay_begin.time,
+                        _op_nodes=[op_node for op_node in replacing_op_nodes
+                                   if residual_begin_qubits.intersection(op_node.qargs)])
+
+                    grouped_delay.events[split_right_idx] = residual_begin_event
+
+                    if not residual_begin_event.op_nodes:
+                        grouped_delay_blocks.append(AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:]).validate())
+                    else:
+                        grouped_delay_blocks.append(AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx:]).validate())
+
+    return closed_joint_delays
+
+def _find_widest_connected_joint_delay(grouped_delay, cmap, bit_idx_locs):
+
+    # Find widest point, incr num_qubits on open, decr on close
+    current_open_qubits = set()
+    current_open_op_nodes = []
+
+    widest = CollectedJointDelay(
+        num_qubits = len(current_open_qubits),
+        begin_delay_event = None,
+        end_delay_event = None,
+        open_op_nodes = current_open_op_nodes.copy())
+
+    for grouped_delay_event in grouped_delay.events:
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f'Considering event: {pformat(grouped_delay_event)} '
+                         f'with widest at entry: {widest}')
+
+        event_qubits = grouped_delay_event.qargs
+
+        if grouped_delay_event.type == 'begin':
+            if not current_open_qubits.isdisjoint(event_qubits):
+                raise RuntimeError('re-opening open qubits?')
+
+            current_open_qubits.update(event_qubits)
+            current_open_op_nodes.extend(grouped_delay_event.op_nodes)
+
+            # KDK Need to check connectedness too
+            if len(current_open_qubits) > widest.num_qubits:
+                widest = CollectedJointDelay(
+                    num_qubits = len(current_open_qubits),
+                    begin_delay_event = grouped_delay_event,
+                    end_delay_event = None,
+                    open_op_nodes = current_open_op_nodes.copy())
+
+        elif grouped_delay_event.type == 'end':
+            if not event_qubits.issubset(current_open_qubits):
+                import pdb; pdb.set_trace()
+                raise RuntimeError('closing qubits that arent open')
+
+            if widest.end_delay_event is None:
+                widest.end_delay_event = grouped_delay_event
+
+            current_open_qubits -= event_qubits
+            for op_node in grouped_delay_event.op_nodes:
+                current_open_op_nodes.remove(op_node)
+        else:
+            raise RuntimeError('bad event type?')
+
+    return widest
