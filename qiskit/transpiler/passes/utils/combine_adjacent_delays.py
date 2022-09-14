@@ -2,7 +2,7 @@ import logging
 
 from pprint import pformat, pprint
 from dataclasses import dataclass
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 from typing import List, Set
 
@@ -229,7 +229,7 @@ class CombineAdjacentDelays(TransformationPass):
         # Split remainder of original delay block into two new delay blocks and add those onto queue to be
         # further split if possible.
 
-        collected_joint_delays = _subdivide_grouped_delays(grouped_delay_blocks, self._min_joinable_delay_duration, self._cmap, bit_idx_locs)
+        collected_joint_delays = _subdivide_grouped_delays(grouped_delay_blocks, self._min_joinable_delay_duration, self.cmap, bit_idx_locs, self.property_set)
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(pformat((
@@ -406,9 +406,6 @@ def _group_delay_blocks(adjacent_delay_blocks):
                 continue
 
             # Look at last known grouped event.
-            # KDK do we need to check adjacency here?
-            # i.e. even though we're in a block, not all event groups will be adjacent
-            # KDK Maybe dump this grouping, it seems to make life hard and doesn't solve any problems (because we'll still need to check adjacency down the road.
             newest_grouped_delay = grouped_delay_block.events[-1]
 
             # If newest grouped event is earlier than current, need a new group.
@@ -442,7 +439,8 @@ def _group_delay_blocks(adjacent_delay_blocks):
 def _subdivide_grouped_delays(grouped_delay_blocks,
                               min_joinable_delay_duration,
                               cmap,
-                              bit_idx_locs):
+                              bit_idx_locs,
+                              property_set):
     closed_joint_delays = []
 
     while grouped_delay_blocks:
@@ -453,7 +451,7 @@ def _subdivide_grouped_delays(grouped_delay_blocks,
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f'Examining grouped_delay: {pformat(grouped_delay)}')
 
-        widest = _find_widest_collected_joint_delay(grouped_delay, cmap, bit_idx_locs)
+        widest = _find_widest_connected_joint_delay(grouped_delay, cmap, bit_idx_locs)
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f'Found widest interval: {widest}')
@@ -488,16 +486,16 @@ def _subdivide_grouped_delays(grouped_delay_blocks,
                                  f'{split_left_idx} and {split_right_idx}.')
 
                 # N.B. These won't be valid until after they have the following events added.
-                new_left_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx])
-                new_right_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:])
 
                 if split_left_idx > 0:
+                    new_left_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx])
 
                     new_left_delay_group.events.append(
                         GroupedDelayEvent(type='end',
                                           time=new_delay_begin.time,
                                           _op_nodes = [op_node for op_node in replacing_op_nodes
                                                       if op_node not in new_delay_begin.op_nodes]))
+
                     if logger.isEnabledFor(logging.DEBUG):
                         logger.debug('Creating group from left-of widest: '
                                      f'{pformat(new_left_delay_group)}')
@@ -506,6 +504,9 @@ def _subdivide_grouped_delays(grouped_delay_blocks,
                     grouped_delay_blocks.append(new_left_delay_group.validate())
 
                 if split_right_idx < len(grouped_delay.events) - 1:
+                    # KDK Need to check here that remaining block is still adjacent, else make more than one
+
+                    new_right_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:])
 
                     new_right_delay_group.events.insert(0,
                         GroupedDelayEvent(type='begin',
@@ -563,43 +564,165 @@ def _subdivide_grouped_delays(grouped_delay_blocks,
 
                     closed_joint_delays.append(narrow_single_delay)
 
-                # If there were qubits in new_delay_begin/new_delay_end that didn't get cut out into singles
-                # retain their begin/end events, but otherwise retain as one group.
-                residual_begin_qubits = new_delay_begin.qargs - narrow_single_delay_qubits
-                residual_end_qubits = new_delay_end.qargs - narrow_single_delay_qubits
+                if narrow_single_delay_qubits:
 
-                # new_left_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx])
-                # new_right_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:])
+                    # If there were qubits in new_delay_begin/new_delay_end that didn't get cut out into singles
+                    # retain their begin/end events, but otherwise retain as one group.
+                    residual_begin_qubits = new_delay_begin.qargs - narrow_single_delay_qubits
+                    residual_end_qubits = new_delay_end.qargs - narrow_single_delay_qubits
 
-                if residual_end_qubits:
-                    residual_end_event = GroupedDelayEvent(
-                        type='end',
-                        time=new_delay_end.time,
-                        _op_nodes=[op_node for op_node in replacing_op_nodes
-                                   if residual_end_qubits.intersection(op_node.qargs)])
+                    # new_left_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx])
+                    # new_right_delay_group = AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:])
 
-                    grouped_delay.events[split_left_idx] = residual_end_event
+                    if residual_end_qubits:
+                        residual_end_event = GroupedDelayEvent(
+                            type='end',
+                            time=new_delay_end.time,
+                            _op_nodes=[op_node for op_node in replacing_op_nodes
+                                       if residual_end_qubits.intersection(op_node.qargs)])
 
-                    if not residual_end_event.op_nodes:
-                        grouped_delay_blocks.append(AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx]).validate())
+                        grouped_delay.events[split_right_idx] = residual_end_event
                     else:
-                        grouped_delay_blocks.append(AdjacentGroupedDelayBlock(grouped_delay.events[:split_left_idx+1]).validate())
+                        grouped_delay.events.pop(split_right_idx)
 
-                if residual_begin_qubits:
-                    residual_begin_event = GroupedDelayEvent(
-                        type='begin',
-                        time=new_delay_begin.time,
-                        _op_nodes=[op_node for op_node in replacing_op_nodes
-                                   if residual_begin_qubits.intersection(op_node.qargs)])
+                    if residual_begin_qubits:
+                        residual_begin_event = GroupedDelayEvent(
+                            type='begin',
+                            time=new_delay_begin.time,
+                            _op_nodes=[op_node for op_node in replacing_op_nodes
+                                       if residual_begin_qubits.intersection(op_node.qargs)])
 
-                    grouped_delay.events[split_right_idx] = residual_begin_event
-
-                    if not residual_begin_event.op_nodes:
-                        grouped_delay_blocks.append(AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx+1:]).validate())
+                        grouped_delay.events[split_left_idx] = residual_begin_event
                     else:
-                        grouped_delay_blocks.append(AdjacentGroupedDelayBlock(grouped_delay.events[split_right_idx:]).validate())
+                        grouped_delay.events.pop(split_left_idx)
+
+                    # Don't want to split in this case, we could e.g. have a delay that started on LHS and ends on RHS,
+                    # And we don't want to pull forward either.
+
+                    grouped_delay_blocks.append(grouped_delay.validate())
+                else:
+                    # If we didn't have any narrow 1q delays to remove, need to partion existing qubits
+                    # with condition that new_delay_begin.qargs and new_delay_end.qargs end up in different partitions.
+
+                    begin_event_partition = set(new_delay_begin.op_nodes)
+                    end_event_partition = set(new_delay_end.op_nodes)
+                    solo_partitions = []
+
+                    unassigned_op_nodes = set(op_node for event in grouped_delay.events
+                                              for op_node in event.op_nodes)
+                    unassigned_op_nodes -= begin_event_partition
+                    unassigned_op_nodes -= end_event_partition
+
+                    # N.B. Will need to re-walk/sort, re-group
+
+                    for unassigned_op_node in unassigned_op_nodes:
+                        unassigned_op_node_start_time = property_set['node_start_time'][unassigned_op_node]
+                        unassigned_op_node_end_time = unassigned_op_node_start_time + unassigned_op_node.op.duration
+
+                        if unassigned_op_node_start_time > new_delay_end.time:
+                            end_event_partition.add(unassigned_op_node)
+                            continue
+
+                        if unassigned_op_node_end_time < new_delay_begin.time:
+                            begin_event_partition.add(unassigned_op_node)
+                            continue
+
+                        # Nodes here overlap narrow section in some way.
+                        qarg_idxs = [bit_idx_locs[qarg] for qarg in unassigned_op_node.qargs]
+                        begin_qarg_idxs = [bit_idx_locs[qarg] for op_node in begin_event_partition
+                                           for qarg in op_node.qargs]
+                        end_qarg_idxs = [bit_idx_locs[qarg] for op_node in end_event_partition
+                                         for qarg in op_node.qargs]
+
+                        # If adjacent to one side, but not the other, add there
+                        if (any(cmap.distance(unassigned_qarg, partition_qarg) == 1
+                                for unassigned_qarg in qarg_idxs
+                                for partition_qarg in begin_qarg_idxs)
+                            and not any(cmap.distance(unassigned_qarg, partition_qarg) == 1
+                                for unassigned_qarg in qarg_idxs
+                                for partition_qarg in end_qarg_idxs)
+                            ):
+                            begin_event_partition.add(unassigned_op_node)
+                            continue
+
+                        if (any(cmap.distance(unassigned_qarg, partition_qarg) == 1
+                                for unassigned_qarg in qarg_idxs
+                                for partition_qarg in end_qarg_idxs)
+                            and not any(cmap.distance(unassigned_qarg, partition_qarg) == 1
+                                for unassigned_qarg in qarg_idxs
+                                for partition_qarg in begin_qarg_idxs)
+                            ):
+                            end_event_partition.add(unassigned_op_node)
+                            continue
+
+                        begin_part_time_overlaps = Counter()
+                        end_part_time_overlaps = Counter()
+
+                        # N.B. Being greedy here, will depend on the order of exmaining unassigned_op_nodes
+                        for begin_part_op_node in begin_event_partition:
+                            part_op_node_start_time = property_set['node_start_time'][begin_part_op_node]
+                            part_op_node_end_time = part_op_node_start_time + begin_part_op_node.op.duration
+
+                            if unassigned_op_node_start_time > part_op_node_end_time:
+                                begin_part_time_overlaps[0] += 1
+                            elif unassigned_op_node_end_time < part_op_node_start_time:
+                                begin_part_time_overlaps[0] += 1
+                            elif unassigned_op_node_start_time < part_op_node_start_time:
+                                begin_part_time_overlaps[unassigned_op_node_end_time - part_op_node_start_time] += 1
+                            else:
+                                begin_part_time_overlaps[part_op_node_end_time - unassigned_op_node_start_time] += 1
+
+                        for end_part_op_node in end_event_partition:
+                            part_op_node_start_time = property_set['node_start_time'][end_part_op_node]
+                            part_op_node_end_time = part_op_node_start_time + end_part_op_node.op.duration
+
+                            if unassigned_op_node_start_time > part_op_node_end_time:
+                                end_part_time_overlaps[0] += 1
+                            elif unassigned_op_node_end_time < part_op_node_start_time:
+                                end_part_time_overlaps[0] += 1
+                            elif unassigned_op_node_start_time < part_op_node_start_time:
+                                end_part_time_overlaps[unassigned_op_node_end_time - part_op_node_start_time] += 1
+                            else:
+                                end_part_time_overlaps[part_op_node_end_time - unassigned_op_node_start_time] += 1
+
+                        if max(begin_part_time_overlaps.keys() | end_part_time_overlaps.keys()) < min_joinable_delay_duration:
+                            solo_partitions.append([unassigned_op_node])
+                        elif max(begin_part_time_overlaps.keys()) > max(end_part_time_overlaps.keys()):
+                            begin_event_partition.add(unassigned_op_node)
+                        else:
+                            end_event_partition.add(unassigned_op_node)
+
+                    for partition in [begin_event_partition, end_event_partition] + solo_partitions:
+                        part_sorted_delay_events = sorted(
+                            (
+                                DelayEvent(
+                                    event_type,
+                                    property_set['node_start_time'][op_node] if event_type == 'begin' else property_set['node_start_time'][op_node]  + op_node.op.duration,
+                                    op_node
+                                )
+                                for op_node in partition
+                                for event_type in ('begin', 'end')
+                            ),
+                            key=DelayEvent.sort_key
+                        )
+                        part_adjacent_delay_blocks = _collect_adjacent_delay_blocks(part_sorted_delay_events, cmap, bit_idx_locs)
+                        part_grouped_delay_blocks = _group_delay_blocks(part_adjacent_delay_blocks)
+
+                        grouped_delay_blocks.extend(part_grouped_delay_blocks)
+
+
+
 
     return closed_joint_delays
+
+def _ungroup_adj_grouped_delay_block(grouped_delay_block):
+    rtn = AdjacentDelayBlock()
+    for event in grouped_delay_block.events:
+        for op_node in event.op_nodes:
+            rtn.events.append(DelayEvent(type=event.type,
+                                         time=event.time,
+                                         op_node=op_node))
+    return rtn
 
 def _find_widest_connected_joint_delay(grouped_delay, cmap, bit_idx_locs):
 
