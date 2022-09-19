@@ -40,6 +40,7 @@ class Optimize1qGatesDecomposition(TransformationPass):
 
         self._target_basis = basis
         self._decomposers = None
+        self._seen_runs = set()
 
         if basis:
             self._decomposers = {}
@@ -62,6 +63,8 @@ class Optimize1qGatesDecomposition(TransformationPass):
                         self._decomposers[
                             tuple(gates)
                         ] = one_qubit_decompose.OneQubitEulerDecomposer(euler_basis_name)
+        print(basis)
+        print(self._decomposers)
 
     def _resynthesize_run(self, run):
         """
@@ -71,12 +74,15 @@ class Optimize1qGatesDecomposition(TransformationPass):
         (None, None) if no synthesis routine applied.
         """
 
+        # print('---')
+        # print(run)
         operator = run[0].op.to_matrix()
         for gate in run[1:]:
             operator = gate.op.to_matrix().dot(operator)
 
         new_circs = {k: v._decompose(operator) for k, v in self._decomposers.items()}
-
+        # for circ in new_circs:
+        #     print(circ)
         new_basis, new_circ = None, None
         if len(new_circs) > 0:
             new_basis, new_circ = min(new_circs.items(), key=lambda x: len(x[1]))
@@ -152,6 +158,7 @@ class Optimize1qGatesDecomposition(TransformationPass):
             logger.info("Skipping pass because no basis is set")
             return dag
 
+
         runs = dag.collect_1q_runs()
         for run in runs:
             # SPECIAL CASE: Don't bother to optimize single U3 gates which are in the basis set.
@@ -165,13 +172,17 @@ class Optimize1qGatesDecomposition(TransformationPass):
                 if "u2" not in self._target_basis and "u1" not in self._target_basis:
                     continue
 
-            new_basis, new_circ = self._resynthesize_run(run)
+            run_ids = tuple(map(id, run)) # KDK Some body could update an op inplace, maybe make the set op.name plus values
+            # maybe a good spot for lru_cache
+            if run_ids not in self._seen_runs:
+                self._seen_runs.add(run_ids)
+                new_basis, new_circ = self._resynthesize_run(run)
 
-            if new_circ is not None and self._substitution_checks(dag, run, new_circ, new_basis):
-                new_dag = circuit_to_dag(new_circ)
-                dag.substitute_node_with_dag(run[0], new_dag)
-                # Delete the other nodes in the run
-                for current_node in run[1:]:
-                    dag.remove_op_node(current_node)
+                if new_circ is not None and self._substitution_checks(dag, run, new_circ, new_basis):
+                    new_dag = circuit_to_dag(new_circ)
+                    dag.substitute_node_with_dag(run[0], new_dag)
+                    # Delete the other nodes in the run
+                    for current_node in run[1:]:
+                        dag.remove_op_node(current_node)
 
         return dag

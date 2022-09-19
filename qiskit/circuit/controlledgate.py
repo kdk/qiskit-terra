@@ -143,6 +143,7 @@ class ControlledGate(Gate):
         closed control qubits and <ctrl_state> is the integer value of
         the control state for the gate.
         """
+        # KDK This is costly
         if self._open_ctrl:
             return f"{self._name}_o{self.ctrl_state}"
         else:
@@ -236,7 +237,7 @@ class ControlledGate(Gate):
     @property
     def _open_ctrl(self) -> bool:
         """Return whether gate has any open controls"""
-        return self.ctrl_state < 2**self.num_ctrl_qubits - 1
+        return self.ctrl_state and self.ctrl_state < 2**self.num_ctrl_qubits - 1
 
     def __eq__(self, other) -> bool:
         return (
