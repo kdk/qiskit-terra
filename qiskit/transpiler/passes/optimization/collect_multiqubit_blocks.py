@@ -39,7 +39,7 @@ class CollectMultiQBlocks(AnalysisPass):
     and the data structure allows these changes to be done quickly.
     """
 
-    def __init__(self, max_block_size=2):
+    def __init__(self, max_block_size=2, block_classifiers=None):
         super().__init__()
         self.parent = {}  # parent array for the union
 
@@ -49,6 +49,7 @@ class CollectMultiQBlocks(AnalysisPass):
         self.gate_groups = {}  # current gate lists for the groups
 
         self.max_block_size = max_block_size  # maximum block size
+        self.block_classifiers = block_classifiers
 
     def find_set(self, index):
         """DSU function for finding root of set of items
@@ -128,6 +129,19 @@ class CollectMultiQBlocks(AnalysisPass):
         op_nodes = dag.topological_op_nodes(key=collect_key)
         qubit_indices = {bit: index for index, bit in enumerate(dag.qubits)}
 
+# something like a topological frontier would be useful here
+# or topological queue
+# given set of input nodes, get back list of next possible nodes
+# can pop any one of, and have it's successors populated (if they are available in topological sort)
+# Can choose from descendents of popped node, but need to keep a set of trimmed nodes to make sure we already popped its predecessors
+# Can trim once all descendants of a node have been popped
+# Might also be helpful to expose "Next but blocked nodes" For those which could be next topologically, but for a node that's not popped yet
+# Also, need an allow_uncontractable option so that we can find
+# delay H delay
+# delay delay delay
+# as one group, even though they can't be contracted into a single delay
+
+        
         for nd in op_nodes:
             can_process = True
             makes_too_big = False
